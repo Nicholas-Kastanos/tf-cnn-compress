@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import Model, Sequential
-from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, LeakyReLU, ReLU, Add, ZeroPadding2D
+from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, LeakyReLU, ReLU, Add, ZeroPadding2D, Concatenate
 from tensorflow.keras.regularizers import l2
 
 from typing import Union
@@ -53,7 +53,7 @@ class DarknetConv(Layer):
         return self.sequential(x)
 
 
-class DarknetResidual(Model):
+class DarknetResidual(Layer):
     def __init__(
         self,
         filters_1: int,
@@ -84,23 +84,17 @@ class DarknetResidual(Model):
         return x
 
 
-class ResidualBlock(Model):
+class ResidualBlock(Layer):
     def __init__(
         self,
         iterations: int,
         filters_1: int,
         filters_2: int,
         activation: str = "mish",
-        kernel_regularizer=None,
+        kernel_regularizer=None
     ):
         super(ResidualBlock, self).__init__()
         self.sequential = Sequential()
-        # self.sequential.add(DarknetConv(
-        #     filters=filters_1,
-        #     kernel_size=3,
-        #     activation=activation,
-        #     kernel_regularizer=kernel_regularizer
-        # ))
         for _ in range(iterations):
             self.sequential.add(
                 DarknetResidual(
@@ -113,3 +107,133 @@ class ResidualBlock(Model):
 
     def call(self, x):
         return self.sequential(x)
+
+
+class DarknetResidualBlock(Layer):
+    def __init__(
+        self,
+        iterations: int,
+        filters_1: int,
+        filters_2: int,
+        activation: str = "mish",
+        kernel_regularizer=None
+    ):
+        super(DarknetResidualBlock, self).__init__()
+
+        self.sequential = Sequential()
+
+        self.sequential.add(
+            DarknetConv(
+                filters=filters_2,
+                kernel_size=3,
+                activation=activation,
+                kernel_regularizer=kernel_regularizer,
+                strides=2
+            )
+        )
+
+        self.sequential.add(
+            ResidualBlock(
+                iterations=iterations,
+                filters_1=filters_1,
+                filters_2=filters_2,
+                activation=activation,
+                kernel_regularizer=kernel_regularizer
+            )
+        )
+
+    def call(self, x):
+        return self.sequential(x)
+
+
+class CSPResidualBlock(Layer):
+    def __init__(
+        self,
+        iterations: int,
+        filters_1: int,
+        filters_2: int,
+        activation: str = "mish",
+        kernel_regularizer=None
+    ):
+        super(CSPResidualBlock, self).__init__()
+        self.part1_conv = DarknetConv(
+            filters=filters_2,
+            kernel_size=1,
+            activation=activation,
+            kernel_regularizer=kernel_regularizer
+        )
+        self.part2_conv1 = DarknetConv(
+            filters=filters_2,
+            kernel_size=1,
+            activation=activation,
+            kernel_regularizer=kernel_regularizer
+        )
+        self.part2_res = ResidualBlock(
+            iterations=iterations,
+            filters_1=filters_1,
+            filters_2=filters_2,
+            activation=activation,
+            kernel_regularizer=kernel_regularizer
+        )
+        self.part2_conv2 = DarknetConv(
+            filters=filters_2,
+            kernel_size=1,
+            activation=activation,
+            kernel_regularizer=kernel_regularizer
+        )
+        self.concat1_2 = Concatenate(axis=-1)
+    
+    def call(self, x):
+        part1 = self.part1_conv(x)
+
+        part2 = self.part2_conv1(x)
+        part2 = self.part2_res(part2)
+        part2 = self.part2_conv2(part2)
+
+        x = self.concat1_2([part2, part1])
+
+class CSPDarknetResidualBlock(Layer):
+    def __init__(
+        self,
+        iterations: int,
+        filters_1: int,
+        filters_2: int,
+        activation: str = "mish",
+        kernel_regularizer=None
+    ):
+        super(CSPDarknetResidualBlock, self).__init__()
+
+        self.sequential = Sequential()
+
+        self.sequential.add(
+            DarknetConv(
+                filters=filters_1,
+                kernel_size=3,
+                activation=activation,
+                kernel_regularizer=kernel_regularizer,
+                strides=2
+            )
+        )
+
+        self.sequential.add(
+            CSPResidualBlock(
+                iterations=iterations,
+                filters_1=filters_1,
+                filters_2=filters_2,
+                activation=activation,
+                kernel_regularizer=kernel_regularizer
+            )
+        )
+
+        self.sequential.add(
+            DarknetConv(
+                filters=filters_2,
+                kernel_size=1,
+                activation=activation,
+                kernel_regularizer=kernel_regularizer
+            )
+        )
+    
+    def call(self, x):
+        return self.sequential(x)
+
