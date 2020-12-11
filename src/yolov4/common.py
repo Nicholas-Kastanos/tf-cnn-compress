@@ -1,45 +1,50 @@
 import tensorflow as tf
-from tensorflow import keras
+from tensorflow.keras import Model, Sequential
+from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, LeakyReLU, ReLU, Add, ZeroPadding2D
+from tensorflow.keras.regularizers import l2
 
 from typing import Union
 
 from ..common import Mish
 
-class DarknetConv(keras.layers.Layer):
+
+class DarknetConv(Layer):
     def __init__(
         self,
         filters: int,
-        kernel_size: Union[int, tuple],
+        kernel_size: int,
         activation: str = "mish",
-        kernel_regularizer=keras.regularizers.l2(0.0005),
+        kernel_regularizer=l2(0.0005),
+        strides: int = 1,
         **kwargs
     ):
         super(DarknetConv, self).__init__(**kwargs)
         self.filters = filters
-        if isinstance(kernel_size, int):
-            self.kernel_size = (kernel_size, kernel_size)
-        else:
-            self.kernel_size = kernel_size
+        self.kernel_size = (kernel_size, kernel_size)
         self.activation = activation
-        
-        self.sequential = keras.Sequential()
+        self.strides = (strides, strides)
+        self.sequential = Sequential()
 
-        self.sequential.add(keras.layers.Conv2D(
+        if self.strides[0] == 2:
+            self.sequential.add(ZeroPadding2D(((1, 0), (1, 0))))
+
+        self.sequential.add(Conv2D(
             filters=self.filters,
             kernel_size=kernel_size,
-            padding="same",
-            strides=(1, 1),
+            strides=self.strides,
+            padding="same" if self.strides[0] == 1 else "valid",
             kernel_regularizer=kernel_regularizer
         ))
 
-        self.sequential.add(keras.layers.BatchNormalization())
+        if self.activation is not None:
+            self.sequential.add(BatchNormalization())
 
         if self.activation == "mish":
             self.sequential.add(Mish())
         elif self.activation == "leaky":
-            self.sequential.add(keras.layers.LeakyReLU(alpha=0.1))
+            self.sequential.add(LeakyReLU(alpha=0.1))
         elif self.activation == "relu":
-            self.sequential.add(keras.layers.ReLU())
+            self.sequential.add(ReLU())
 
     def build(self, input_shape):
         self.input_dim = input_shape[-1]
@@ -47,13 +52,14 @@ class DarknetConv(keras.layers.Layer):
     def call(self, x):
         return self.sequential(x)
 
-class DarknetResidual(keras.Model):
+
+class DarknetResidual(Model):
     def __init__(
         self,
-        filters_1: Union[int, tuple] = 1,
-        filters_2: Union[int, tuple] = 3,
+        filters_1: int,
+        filters_2: int,
         activation: str = "mish",
-        kernel_regularizer = None
+        kernel_regularizer=None
     ):
         super(DarknetResidual, self).__init__()
         self.conv_1 = DarknetConv(
@@ -68,7 +74,7 @@ class DarknetResidual(keras.Model):
             activation=activation,
             kernel_regularizer=kernel_regularizer
         )
-        self.add = keras.layers.Add()
+        self.add = Add()
 
     def call(self, x):
         prev = x
@@ -76,18 +82,25 @@ class DarknetResidual(keras.Model):
         x = self.conv_2(x)
         x = self.add([prev, x])
         return x
-    
-class ResidualBlock(keras.Model):
+
+
+class ResidualBlock(Model):
     def __init__(
         self,
         iterations: int,
-        filters_1: Union[int, tuple] = 1,
-        filters_2: Union[int, tuple] = 3,
+        filters_1: int,
+        filters_2: int,
         activation: str = "mish",
         kernel_regularizer=None,
     ):
         super(ResidualBlock, self).__init__()
-        self.sequential = keras.Sequential()
+        self.sequential = Sequential()
+        # self.sequential.add(DarknetConv(
+        #     filters=filters_1,
+        #     kernel_size=3,
+        #     activation=activation,
+        #     kernel_regularizer=kernel_regularizer
+        # ))
         for _ in range(iterations):
             self.sequential.add(
                 DarknetResidual(
@@ -97,6 +110,6 @@ class ResidualBlock(keras.Model):
                     kernel_regularizer=kernel_regularizer
                 )
             )
-    
+
     def call(self, x):
         return self.sequential(x)
