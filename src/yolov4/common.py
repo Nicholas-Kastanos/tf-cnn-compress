@@ -1,7 +1,5 @@
 import tensorflow as tf
-from tensorflow.keras import Model, Sequential
-from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, LeakyReLU, ReLU, Add, ZeroPadding2D, Concatenate
-from tensorflow.keras.regularizers import l2
+from tensorflow.keras import Layer, Sequential, layers, regularizers
 
 from typing import Union
 
@@ -14,7 +12,7 @@ class DarknetConv(Layer):
         filters: int,
         kernel_size: int,
         activation: str = "mish",
-        kernel_regularizer=l2(0.0005),
+        kernel_regularizer=regularizers.l2(0.0005),
         strides: int = 1,
         **kwargs
     ):
@@ -26,9 +24,9 @@ class DarknetConv(Layer):
         self.sequential = Sequential()
 
         if self.strides[0] == 2:
-            self.sequential.add(ZeroPadding2D(((1, 0), (1, 0))))
+            self.sequential.add(layers.ZeroPadding2D(((1, 0), (1, 0))))
 
-        self.sequential.add(Conv2D(
+        self.sequential.add(layers.Conv2D(
             filters=self.filters,
             kernel_size=kernel_size,
             strides=self.strides,
@@ -37,14 +35,14 @@ class DarknetConv(Layer):
         ))
 
         if self.activation is not None:
-            self.sequential.add(BatchNormalization())
+            self.sequential.add(layers.BatchNormalization())
 
         if self.activation == "mish":
             self.sequential.add(Mish())
         elif self.activation == "leaky":
-            self.sequential.add(LeakyReLU(alpha=0.1))
+            self.sequential.add(layers.LeakyReLU(alpha=0.1))
         elif self.activation == "relu":
-            self.sequential.add(ReLU())
+            self.sequential.add(layers.ReLU())
 
     def build(self, input_shape):
         self.input_dim = input_shape[-1]
@@ -74,7 +72,7 @@ class DarknetResidual(Layer):
             activation=activation,
             kernel_regularizer=kernel_regularizer
         )
-        self.add = Add()
+        self.add = layers.Add()
 
     def call(self, x):
         prev = x
@@ -181,7 +179,7 @@ class CSPResidualBlock(Layer):
             activation=activation,
             kernel_regularizer=kernel_regularizer
         )
-        self.concat1_2 = Concatenate(axis=-1)
+        self.concat1_2 = layers.Concatenate(axis=-1)
     
     def call(self, x):
         part1 = self.part1_conv(x)
