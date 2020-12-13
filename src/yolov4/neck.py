@@ -1,10 +1,10 @@
 import tensorflow as tf
-from tensorflow.keras import Layer, layers
+from tensorflow.keras import layers
 
 from .common import DarknetConv
 
 
-class PANet(Layer):
+class PANet(layers.Layer):
     def __init__(
         self,
         num_classes: int,

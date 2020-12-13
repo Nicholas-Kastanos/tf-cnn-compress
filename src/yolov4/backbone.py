@@ -1,9 +1,9 @@
 import tensorflow as tf
-from tensorflow.keras import Layer, layers
+from tensorflow.keras import layers
 
 from .common import DarknetConv, DarknetResidualBlock, CSPDarknetResidualBlock
 
-class CSPDarknet53(Layer):
+class CSPDarknet53(layers.Layer):
     def __init__(
         self,
         activation0: str = "mish",
@@ -91,7 +91,7 @@ class CSPDarknet53(Layer):
         return route1, route2, x
 
 
-class SPP(Layer):
+class SPP(layers.Layer):
     def __init__(
         self
     ):

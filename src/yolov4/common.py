@@ -1,12 +1,12 @@
 import tensorflow as tf
-from tensorflow.keras import Layer, Sequential, layers, regularizers
+from tensorflow.keras import Sequential, layers, regularizers
 
 from typing import Union
 
 from ..common import Mish
 
 
-class DarknetConv(Layer):
+class DarknetConv(layers.Layer):
     def __init__(
         self,
         filters: int,
@@ -51,7 +51,7 @@ class DarknetConv(Layer):
         return self.sequential(x)
 
 
-class DarknetResidual(Layer):
+class DarknetResidual(layers.Layer):
     def __init__(
         self,
         filters_1: int,
@@ -82,7 +82,7 @@ class DarknetResidual(Layer):
         return x
 
 
-class ResidualBlock(Layer):
+class ResidualBlock(layers.Layer):
     def __init__(
         self,
         iterations: int,
@@ -107,7 +107,7 @@ class ResidualBlock(Layer):
         return self.sequential(x)
 
 
-class DarknetResidualBlock(Layer):
+class DarknetResidualBlock(layers.Layer):
     def __init__(
         self,
         iterations: int,
@@ -144,7 +144,7 @@ class DarknetResidualBlock(Layer):
         return self.sequential(x)
 
 
-class CSPResidualBlock(Layer):
+class CSPResidualBlock(layers.Layer):
     def __init__(
         self,
         iterations: int,
@@ -190,7 +190,7 @@ class CSPResidualBlock(Layer):
 
         x = self.concat1_2([part2, part1])
 
-class CSPDarknetResidualBlock(Layer):
+class CSPDarknetResidualBlock(layers.Layer):
     def __init__(
         self,
         iterations: int,

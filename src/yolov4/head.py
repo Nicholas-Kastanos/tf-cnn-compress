@@ -1,8 +1,8 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import activations, backend, layers, Layer
+from tensorflow.keras import activations, backend, layers
 
-class YOLOv3Head(Layer):
+class YOLOv3Head(layers.Layer):
     def __init__(self, anchors, num_classes, xysclaes):
         super(YOLOv3Head, self).__init__(name="YOLOv3Head")
         self.a_half = None
