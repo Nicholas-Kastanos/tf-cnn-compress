@@ -31,7 +31,7 @@ import cv2
 import numpy as np
 
 from . import train
-from .common import media
+from . import media
 
 
 class Dataset:
