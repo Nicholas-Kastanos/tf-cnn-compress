@@ -189,6 +189,7 @@ class CSPResidualBlock(layers.Layer):
         part2 = self.part2_conv2(part2)
 
         x = self.concat1_2([part2, part1])
+        return x
 
 class CSPDarknetResidualBlock(layers.Layer):
     def __init__(
