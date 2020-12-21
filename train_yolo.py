@@ -174,19 +174,60 @@ grid_xy = [
 ]
 
 
-# @tf.function
+def construct_gt_array_exist_positive(ground_truth_i, iou_mask, xy_index, xywh, smooth_onehot):
+    ground_truth_i = ground_truth_i.numpy()
+    iou_mask = iou_mask.numpy()
+    xy_index = xy_index.numpy()
+    xywh = xywh.numpy()
+    smooth_onehot = smooth_onehot.numpy()
+    for j, mask in enumerate(iou_mask):
+        if mask:
+            _x, _y = int(xy_index[0]), int(xy_index[1])
+            ground_truth_i[0, _y, _x, j, 0:4] = xywh
+            ground_truth_i[0, _y, _x, j, 4:5] = 1.0
+            ground_truth_i[0, _y, _x, j, 5:] = smooth_onehot
+    return tf.convert_to_tensor(ground_truth_i)
+
+
+def construct_gt_array_exist_positive_false(ground_truth_i, ious, xywh, grid_size, smooth_onehot):
+    ground_truth_i = ground_truth_i.numpy()
+    np_ious = []
+    for iou in ious:
+        np_ious.append(iou.numpy())
+    ious = np_ious
+    xywh = xywh.numpy()
+    smooth_onehot = smooth_onehot.numpy()
+
+    index = np.argmax(np.array(ious))
+    i = index // 3
+    j = index % 3
+
+    xy_grid = xywh[0:2] * (
+        grid_size[i][1],
+        grid_size[i][0],
+    )
+    xy_index = np.floor(xy_grid)
+
+    _x, _y = int(xy_index[0]), int(xy_index[1])
+    ground_truth_i[0, _y, _x, j, 0:4] = xywh
+    ground_truth_i[0, _y, _x, j, 4:5] = 1.0
+    ground_truth_i[0, _y, _x, j, 5:] = smooth_onehot
+
+    return tf.convert_to_tensor(ground_truth_i)
+
+
+
+@tf.function
 def coco_to_yolo(features):
     objects = features["objects"]
     bboxes: tf.Tensor = objects["bbox"]
     labels: tf.Tensor = objects["label"]
-    assert bboxes.shape[0] == labels.shape[0]
-    assert bboxes.shape[1] == 4
 
     x_center = tf.math.reduce_mean(
         tf.concat(
             [
-                tf.reshape(bboxes[:, 3], (bboxes.shape[0], 1)),
-                tf.reshape(bboxes[:, 1], (bboxes.shape[0], 1))
+                tf.reshape(bboxes[:, 3], (tf.shape(bboxes)[0], 1)),
+                tf.reshape(bboxes[:, 1], (tf.shape(bboxes)[0], 1))
             ],
             axis=1
         ),
@@ -196,8 +237,8 @@ def coco_to_yolo(features):
     y_center = tf.math.reduce_mean(
         tf.concat(
             [
-                tf.reshape(bboxes[:, 2], (bboxes.shape[0], 1)),
-                tf.reshape(bboxes[:, 0], (bboxes.shape[0], 1))
+                tf.reshape(bboxes[:, 2], (tf.shape(bboxes)[0], 1)),
+                tf.reshape(bboxes[:, 0], (tf.shape(bboxes)[0], 1))
             ],
             axis=1
         ),
@@ -206,20 +247,19 @@ def coco_to_yolo(features):
     )
 
     width = tf.subtract(
-        tf.reshape(bboxes[:, 3], (bboxes.shape[0], 1)),
-        tf.reshape(bboxes[:, 1], (bboxes.shape[0], 1))
+        tf.reshape(bboxes[:, 3], (tf.shape(bboxes)[0], 1)),
+        tf.reshape(bboxes[:, 1], (tf.shape(bboxes)[0], 1))
     )
 
     height = tf.subtract(
-        tf.reshape(bboxes[:, 2], (bboxes.shape[0], 1)),
-        tf.reshape(bboxes[:, 0], (bboxes.shape[0], 1))
+        tf.reshape(bboxes[:, 2], (tf.shape(bboxes)[0], 1)),
+        tf.reshape(bboxes[:, 0], (tf.shape(bboxes)[0], 1))
     )
 
-    labels = tf.reshape(labels, (labels.shape[0], 1))
+    labels = tf.reshape(labels, (tf.shape(labels)[0], 1))
     position = tf.concat([x_center, y_center, width, height], axis=1)
-    modified_bboxes = tf.concat([position, tf.cast(labels, tf.float32)], axis=1)
-
-    assert modified_bboxes.shape == (bboxes.shape[0], 5)
+    modified_bboxes = tf.concat(
+        [position, tf.cast(labels, tf.float32)], axis=1)
 
     ground_truth = [
         np.zeros(
@@ -240,86 +280,121 @@ def coco_to_yolo(features):
 
     for bbox in modified_bboxes:
         # [b_x, b_y, b_w, b_h, class_id]
-        xywh = np.array(bbox[:4], dtype=np.float32)
-        class_id = int(bbox[4])
+        xywh = bbox[:4]
+        class_id = tf.cast(bbox[4], tf.int32)
 
         # smooth_onehot = [0.xx, ... , 1-(0.xx*(n-1)), 0.xx, ...]
-        onehot = np.zeros(num_classes, dtype=np.float32)
-        onehot[class_id] = 1.0
-        uniform_distribution = np.full(
-            num_classes, 1.0 / num_classes, dtype=np.float32
+        onehot = tf.one_hot(class_id, num_classes, dtype=tf.float32)
+
+        uniform_distribution = tf.fill(
+            [num_classes], 1.0/float(num_classes)
         )
-        smooth_onehot = (
-            1 - label_smoothing
-        ) * onehot + label_smoothing * uniform_distribution
+
+        smooth_onehot = tf.constant(
+            1 - label_smoothing) * onehot + label_smoothing * uniform_distribution
 
         ious = []
         exist_positive = False
         for i in range(len(grid_xy)):
             # Dim(anchors, xywh)
-            anchors_xywh = np.zeros((3, 4), dtype=np.float32)
-            anchors_xywh[:, 0:2] = xywh[0:2]
-            anchors_xywh[:, 2:4] = anchors_ratio[i]
+            anchors_xywh = tf.concat(
+                [
+                    tf.repeat(
+                        tf.reshape(
+                            xywh[0:2],
+                            shape=(1, tf.shape(xywh[0:2])[0])
+                        ),
+                        repeats=len(anchors_ratio[i]), axis=0
+                    ),
+                    tf.cast(anchors_ratio[i], dtype=tf.float32)
+                ], axis=-1
+            )
             iou = train.bbox_iou(xywh, anchors_xywh)
             ious.append(iou)
             iou_mask = iou > 0.3
 
-            if np.any(iou_mask):
+            if tf.math.reduce_any(iou_mask):
                 xy_grid = xywh[0:2] * (
                     grid_size[i][1],
                     grid_size[i][0],
                 )
-                xy_index = np.floor(xy_grid)
+                xy_index = tf.math.floor(xy_grid)
 
                 exist_positive = True
-                for j, mask in enumerate(iou_mask):
-                    if mask:
-                        _x, _y = int(xy_index[0]), int(xy_index[1])
-                        ground_truth[i][0, _y, _x, j, 0:4] = xywh
-                        ground_truth[i][0, _y, _x, j, 4:5] = 1.0
-                        ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
+
+                [ground_truth[i], ] = tf.py_function(
+                    func=construct_gt_array_exist_positive,
+                    inp=[ground_truth[i], iou_mask,
+                         xy_index, xywh, smooth_onehot],
+                    Tout=[tf.float32]
+                )
+                # for j, mask in enumerate(iou_mask):
+                #     if mask:
+                #         _x, _y = int(xy_index[0]), int(xy_index[1])
+                #         ground_truth[i][0, _y, _x, j, 0:4] = xywh
+                #         ground_truth[i][0, _y, _x, j, 4:5] = 1.0
+                #         ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
 
         if not exist_positive:
-            index = np.argmax(np.array(ious))
-            i = index // 3
-            j = index % 3
 
-            xy_grid = xywh[0:2] * (
-                grid_size[i][1],
-                grid_size[i][0],
+            [ground_truth[i],] = tf.py_function(
+                func=construct_gt_array_exist_positive_false,
+                inp=[ground_truth[i], ious, xywh, grid_size, smooth_onehot],
+                Tout=[tf.float32]
             )
-            xy_index = np.floor(xy_grid)
+            # index = np.argmax(np.array(ious))
+            # i = index // 3
+            # j = index % 3
 
-            _x, _y = int(xy_index[0]), int(xy_index[1])
-            ground_truth[i][0, _y, _x, j, 0:4] = xywh
-            ground_truth[i][0, _y, _x, j, 4:5] = 1.0
-            ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
+            # xy_grid = xywh[0:2] * (
+            #     grid_size[i][1],
+            #     grid_size[i][0],
+            # )
+            # xy_index = np.floor(xy_grid)
+
+            # _x, _y = int(xy_index[0]), int(xy_index[1])
+            # ground_truth[i][0, _y, _x, j, 0:4] = xywh
+            # ground_truth[i][0, _y, _x, j, 4:5] = 1.0
+            # ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
 
     gt_tensor = []
     for i, _grid in enumerate(grid_xy):
-        gt_tensor.append(tf.convert_to_tensor(ground_truth[i], dtype=tf.float32))
+        gt_tensor.append(tf.convert_to_tensor(
+            ground_truth[i], dtype=tf.float32))
 
     yolo_features = {
         "image": features["image"],
         "image/filename": features["image/filename"],
         "image/id": features["image/id"],
-        "ground_truth": gt_tensor # same output as dataset.Dataset.bboxes_to_ground_truth
+        "ground_truth": gt_tensor  # same output as dataset.Dataset.bboxes_to_ground_truth
     }
     return yolo_features
 
 
 for example in ds_train.skip(5).take(1):
-    image = example["image"]
+    # image = example["image"]
+    # print(image.shape)
     # plt.imshow(image)
     # plt.show()
 
     coco_to_yolo(example)
 
 
-# In[10]:
+# ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+# ds_train = ds_train.cache()
+# ds_train = ds_train.shuffle(1000)
+# ds_train = ds_train.batch(batch_size)
+# ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
+
+# ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+# ds_val = ds_val.batch(batch_size)
+# ds_val = ds_val.cache()
+# ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
+
+# # In[10]:
 
 
-# epochs = 400
+# epochs = 1
 # lr=1e-4
 # def lr_scheduler(epoch):
 #     if epoch < int(epochs * 0.5):
@@ -331,21 +406,21 @@ for example in ds_train.skip(5).take(1):
 #     return lr * 0.01
 
 
-# # In[13]:
+# # # In[13]:
 
 
 # backend.clear_session()
 # inputs = layers.Input([input_size[1], input_size[0], 3])
 # yolo = YOLOv4(
 #     anchors=anchors,
-#     num_classes=len(classes),
+#     num_classes=len(num_classes),
 #     xyscales=xyscales,
 #     kernel_regularizer=regularizers.l2(0.0005)
 # )
 # yolo(inputs)
 
 
-# # In[14]:
+# # # In[14]:
 
 
 # optimizer = optimizers.Adam(learning_rate=lr)
@@ -375,20 +450,20 @@ for example in ds_train.skip(5).take(1):
 #     tensorboard_callback
 # ]
 # initial_epoch = 0
-# steps_per_epoch = 100
-# validation_steps = 50
-# validation_freq = 5
+# steps_per_epoch = 10#100
+# validation_steps = 5#50
+# validation_freq = 1#5
 
 
-# # In[ ]:
+# # # In[ ]:
 
 # yolo.fit(
-#     train_data_set,
+#     ds_train,
 #     batch_size=batch_size,
 #     epochs=epochs,
 #     verbose=verbose,
 #     callbacks=callbacks,
-#     validation_data=val_data_set,
+#     validation_data=ds_val,
 #     initial_epoch=initial_epoch,
 #     steps_per_epoch=steps_per_epoch,
 #     validation_steps=validation_steps,
@@ -396,4 +471,4 @@ for example in ds_train.skip(5).take(1):
 # )
 
 
-# # In[ ]:
+# # # In[ ]:
