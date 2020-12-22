@@ -174,8 +174,11 @@ grid_xy = [
 ]
 
 
-def construct_gt_array_exist_positive(ground_truth_i, iou_mask, xy_index, xywh, smooth_onehot):
-    ground_truth_i = ground_truth_i.numpy()
+def construct_gt_array_exist_positive(ground_truth, i, iou_mask, xy_index, xywh, smooth_onehot):
+    print("In Construct")
+    print(ground_truth)
+    for k in range(len(ground_truth)):
+        ground_truth[k] = ground_truth[k].numpy()
     iou_mask = iou_mask.numpy()
     xy_index = xy_index.numpy()
     xywh = xywh.numpy()
@@ -183,14 +186,17 @@ def construct_gt_array_exist_positive(ground_truth_i, iou_mask, xy_index, xywh, 
     for j, mask in enumerate(iou_mask):
         if mask:
             _x, _y = int(xy_index[0]), int(xy_index[1])
-            ground_truth_i[0, _y, _x, j, 0:4] = xywh
-            ground_truth_i[0, _y, _x, j, 4:5] = 1.0
-            ground_truth_i[0, _y, _x, j, 5:] = smooth_onehot
-    return tf.convert_to_tensor(ground_truth_i)
+            ground_truth[i][0, _y, _x, j, 0:4] = xywh
+            ground_truth[i][0, _y, _x, j, 4:5] = 1.0
+            ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
+    return ground_truth
 
 
-def construct_gt_array_exist_positive_false(ground_truth_i, ious, xywh, grid_size, smooth_onehot):
-    ground_truth_i = ground_truth_i.numpy()
+def construct_gt_array_exist_positive_false(ground_truth, ious, xywh, grid_size, smooth_onehot):
+    tf.print(type(ground_truth))
+    tf.print(type(ground_truth[0]))
+    for i in range(len(ground_truth)):
+        ground_truth[i] = ground_truth[i].numpy()
     np_ious = []
     for iou in ious:
         np_ious.append(iou.numpy())
@@ -209,13 +215,11 @@ def construct_gt_array_exist_positive_false(ground_truth_i, ious, xywh, grid_siz
     xy_index = np.floor(xy_grid)
 
     _x, _y = int(xy_index[0]), int(xy_index[1])
-    ground_truth_i[0, _y, _x, j, 0:4] = xywh
-    ground_truth_i[0, _y, _x, j, 4:5] = 1.0
-    ground_truth_i[0, _y, _x, j, 5:] = smooth_onehot
+    ground_truth[i][0, _y, _x, j, 0:4] = xywh
+    ground_truth[i][0, _y, _x, j, 4:5] = 1.0
+    ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
 
-    return tf.convert_to_tensor(ground_truth_i)
-
-
+    return ground_truth
 
 @tf.function
 def coco_to_yolo(features):
@@ -322,24 +326,18 @@ def coco_to_yolo(features):
 
                 exist_positive = True
 
-                [ground_truth[i], ] = tf.py_function(
+                [ground_truth, ] = tf.py_function(
                     func=construct_gt_array_exist_positive,
-                    inp=[ground_truth[i], iou_mask,
+                    inp=[ground_truth, i, iou_mask,
                          xy_index, xywh, smooth_onehot],
                     Tout=[tf.float32]
                 )
-                # for j, mask in enumerate(iou_mask):
-                #     if mask:
-                #         _x, _y = int(xy_index[0]), int(xy_index[1])
-                #         ground_truth[i][0, _y, _x, j, 0:4] = xywh
-                #         ground_truth[i][0, _y, _x, j, 4:5] = 1.0
-                #         ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
 
         if not exist_positive:
 
-            [ground_truth[i],] = tf.py_function(
+            [ground_truth,] = tf.py_function(
                 func=construct_gt_array_exist_positive_false,
-                inp=[ground_truth[i], ious, xywh, grid_size, smooth_onehot],
+                inp=[ground_truth, ious, xywh, grid_size, smooth_onehot],
                 Tout=[tf.float32]
             )
             # index = np.argmax(np.array(ious))
