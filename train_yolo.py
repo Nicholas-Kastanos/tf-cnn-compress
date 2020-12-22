@@ -173,53 +173,83 @@ grid_xy = [
     for _size in grid_size  # (height, width)
 ]
 
+def bboxes_to_ground_truth(bboxes):
+    ground_truth = [
+        np.zeros(
+                (
+                    1,
+                    _size[0],
+                    _size[1],
+                    3,
+                    5 + num_classes,
+                ),
+                dtype=np.float32,
+            )
+        for _size in grid_size
+    ]
 
-def construct_gt_array_exist_positive(ground_truth, i, iou_mask, xy_index, xywh, smooth_onehot):
-    print("In Construct")
-    print(ground_truth)
-    for k in range(len(ground_truth)):
-        ground_truth[k] = ground_truth[k].numpy()
-    iou_mask = iou_mask.numpy()
-    xy_index = xy_index.numpy()
-    xywh = xywh.numpy()
-    smooth_onehot = smooth_onehot.numpy()
-    for j, mask in enumerate(iou_mask):
-        if mask:
+    for i, _grid in enumerate(grid_xy):
+        ground_truth[i][..., 0:2] = _grid
+
+    for bbox in bboxes:
+        # [b_x, b_y, b_w, b_h, class_id]
+        xywh = np.array(bbox[:4], dtype=np.float32)
+        class_id = int(bbox[4])
+
+        # smooth_onehot = [0.xx, ... , 1-(0.xx*(n-1)), 0.xx, ...]
+        onehot = np.zeros(num_classes, dtype=np.float32)
+        onehot[class_id] = 1.0
+        uniform_distribution = np.full(
+            num_classes, 1.0 / num_classes, dtype=np.float32
+        )
+        smooth_onehot = (
+            1 - label_smoothing
+        ) * onehot + label_smoothing * uniform_distribution
+
+        ious = []
+        exist_positive = False
+        for i in range(len(grid_xy)):
+            # Dim(anchors, xywh)
+            anchors_xywh = np.zeros((3, 4), dtype=np.float32)
+            anchors_xywh[:, 0:2] = xywh[0:2]
+            anchors_xywh[:, 2:4] = anchors_ratio[i]
+            iou = train.bbox_iou(xywh, anchors_xywh)
+            ious.append(iou)
+            iou_mask = iou > 0.3
+
+            if np.any(iou_mask):
+                xy_grid = xywh[0:2] * (
+                    grid_size[i][1],
+                    grid_size[i][0],
+                )
+                xy_index = np.floor(xy_grid)
+
+                exist_positive = True
+                for j, mask in enumerate(iou_mask):
+                    if mask:
+                        _x, _y = int(xy_index[0]), int(xy_index[1])
+                        ground_truth[i][0, _y, _x, j, 0:4] = xywh
+                        ground_truth[i][0, _y, _x, j, 4:5] = 1.0
+                        ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
+
+        if not exist_positive:
+            index = np.argmax(np.array(ious))
+            i = index // 3
+            j = index % 3
+
+            xy_grid = xywh[0:2] * (
+                grid_size[i][1],
+                grid_size[i][0],
+            )
+            xy_index = np.floor(xy_grid)
+
             _x, _y = int(xy_index[0]), int(xy_index[1])
             ground_truth[i][0, _y, _x, j, 0:4] = xywh
             ground_truth[i][0, _y, _x, j, 4:5] = 1.0
             ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
-    return ground_truth
-
-
-def construct_gt_array_exist_positive_false(ground_truth, ious, xywh, grid_size, smooth_onehot):
-    tf.print(type(ground_truth))
-    tf.print(type(ground_truth[0]))
-    for i in range(len(ground_truth)):
-        ground_truth[i] = ground_truth[i].numpy()
-    np_ious = []
-    for iou in ious:
-        np_ious.append(iou.numpy())
-    ious = np_ious
-    xywh = xywh.numpy()
-    smooth_onehot = smooth_onehot.numpy()
-
-    index = np.argmax(np.array(ious))
-    i = index // 3
-    j = index % 3
-
-    xy_grid = xywh[0:2] * (
-        grid_size[i][1],
-        grid_size[i][0],
-    )
-    xy_index = np.floor(xy_grid)
-
-    _x, _y = int(xy_index[0]), int(xy_index[1])
-    ground_truth[i][0, _y, _x, j, 0:4] = xywh
-    ground_truth[i][0, _y, _x, j, 4:5] = 1.0
-    ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
 
     return ground_truth
+
 
 @tf.function
 def coco_to_yolo(features):
@@ -265,129 +295,45 @@ def coco_to_yolo(features):
     modified_bboxes = tf.concat(
         [position, tf.cast(labels, tf.float32)], axis=1)
 
-    ground_truth = [
-        np.zeros(
-                (
-                    1,
-                    _size[0],
-                    _size[1],
-                    3,
-                    5 + num_classes,
-                ),
-            dtype=np.float32,
-        )
-        for _size in grid_size
-    ]
-
-    for i, _grid in enumerate(grid_xy):
-        ground_truth[i][..., 0:2] = _grid
-
-    for bbox in modified_bboxes:
-        # [b_x, b_y, b_w, b_h, class_id]
-        xywh = bbox[:4]
-        class_id = tf.cast(bbox[4], tf.int32)
-
-        # smooth_onehot = [0.xx, ... , 1-(0.xx*(n-1)), 0.xx, ...]
-        onehot = tf.one_hot(class_id, num_classes, dtype=tf.float32)
-
-        uniform_distribution = tf.fill(
-            [num_classes], 1.0/float(num_classes)
-        )
-
-        smooth_onehot = tf.constant(
-            1 - label_smoothing) * onehot + label_smoothing * uniform_distribution
-
-        ious = []
-        exist_positive = False
-        for i in range(len(grid_xy)):
-            # Dim(anchors, xywh)
-            anchors_xywh = tf.concat(
-                [
-                    tf.repeat(
-                        tf.reshape(
-                            xywh[0:2],
-                            shape=(1, tf.shape(xywh[0:2])[0])
-                        ),
-                        repeats=len(anchors_ratio[i]), axis=0
-                    ),
-                    tf.cast(anchors_ratio[i], dtype=tf.float32)
-                ], axis=-1
-            )
-            iou = train.bbox_iou(xywh, anchors_xywh)
-            ious.append(iou)
-            iou_mask = iou > 0.3
-
-            if tf.math.reduce_any(iou_mask):
-                xy_grid = xywh[0:2] * (
-                    grid_size[i][1],
-                    grid_size[i][0],
-                )
-                xy_index = tf.math.floor(xy_grid)
-
-                exist_positive = True
-
-                [ground_truth, ] = tf.py_function(
-                    func=construct_gt_array_exist_positive,
-                    inp=[ground_truth, i, iou_mask,
-                         xy_index, xywh, smooth_onehot],
-                    Tout=[tf.float32]
-                )
-
-        if not exist_positive:
-
-            [ground_truth,] = tf.py_function(
-                func=construct_gt_array_exist_positive_false,
-                inp=[ground_truth, ious, xywh, grid_size, smooth_onehot],
-                Tout=[tf.float32]
-            )
-            # index = np.argmax(np.array(ious))
-            # i = index // 3
-            # j = index % 3
-
-            # xy_grid = xywh[0:2] * (
-            #     grid_size[i][1],
-            #     grid_size[i][0],
-            # )
-            # xy_index = np.floor(xy_grid)
-
-            # _x, _y = int(xy_index[0]), int(xy_index[1])
-            # ground_truth[i][0, _y, _x, j, 0:4] = xywh
-            # ground_truth[i][0, _y, _x, j, 4:5] = 1.0
-            # ground_truth[i][0, _y, _x, j, 5:] = smooth_onehot
-
-    gt_tensor = []
-    for i, _grid in enumerate(grid_xy):
-        gt_tensor.append(tf.convert_to_tensor(
-            ground_truth[i], dtype=tf.float32))
+    ground_truth = tf.numpy_function(
+        func=bboxes_to_ground_truth,
+        inp=[modified_bboxes],
+        Tout=[tf.float32 for _size in grid_size]
+    )
 
     yolo_features = {
         "image": features["image"],
         "image/filename": features["image/filename"],
         "image/id": features["image/id"],
-        "ground_truth": gt_tensor  # same output as dataset.Dataset.bboxes_to_ground_truth
+        "ground_truth": {
+            "small": ground_truth[0],
+            "medium": ground_truth[1],
+            "large": ground_truth[2]
+        }  # same output as dataset.Dataset.bboxes_to_ground_truth
     }
+
     return yolo_features
 
 
-for example in ds_train.skip(5).take(1):
-    # image = example["image"]
-    # print(image.shape)
-    # plt.imshow(image)
-    # plt.show()
+# for example in ds_train.skip(5).take(1):
 
-    coco_to_yolo(example)
+#     mapped = coco_to_yolo(example)
+#     image = mapped["image"]
+#     print(image.shape)
+#     print(mapped["ground_truth"])
+#     # plt.imshow(image)
+#     # plt.show()
 
+ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.cache()
+ds_train = ds_train.shuffle(1000)
+ds_train = ds_train.batch(batch_size)
+ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
-# ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-# ds_train = ds_train.cache()
-# ds_train = ds_train.shuffle(1000)
-# ds_train = ds_train.batch(batch_size)
-# ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
-
-# ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-# ds_val = ds_val.batch(batch_size)
-# ds_val = ds_val.cache()
-# ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
+ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_val = ds_val.batch(batch_size)
+ds_val = ds_val.cache()
+ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
 # # In[10]:
 
