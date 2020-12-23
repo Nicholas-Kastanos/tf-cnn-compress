@@ -146,7 +146,7 @@ anchors = np.array([
 ]).astype(np.float32).reshape(3, 3, 2)
 strides = np.array([8, 16, 32])
 xyscales = np.array([1.2, 1.1, 1.05])
-input_size = (608, 416)
+input_size = (416, 416)
 
 anchors_ratio = anchors / input_size[0]
 batch_size = 32
@@ -251,6 +251,55 @@ def bboxes_to_ground_truth(bboxes):
     return ground_truth
 
 
+def resize_image(
+    image,
+    ground_truth
+):
+    height, width, _ = image.shape
+
+    if width / height >= input_size[0] / input_size[1]:
+        scale = input_size[0] / width
+    else:
+        scale = input_size[1] / height
+
+    # Resize
+    if scale != 1:
+        width = int(round(width * scale))
+        height = int(round(height * scale))
+        resized_image = tf.image.resize(image, (width, height))
+    else:
+        resized_image = np.copy(image)
+
+    # Pad
+    dw = input_size[0] - width
+    dh = input_size[1] - height
+
+    if not (dw == 0 and dh == 0):
+        dw = dw // 2
+        dh = dh // 2
+        # height, width, channels
+        padded_image = np.full(
+            (input_size[0], input_size[1], 3), 255, dtype=np.uint8
+        )
+        padded_image[dw: width + dw, dh: height + dh, :] = resized_image
+    else:
+        padded_image = resized_image
+
+    # Resize ground truth
+    ground_truth = np.copy(ground_truth)
+
+    if dw > dh:
+        scale = width / input_size[0]
+        ground_truth[:, 0] = scale * (ground_truth[:, 0] - 0.5) + 0.5
+        ground_truth[:, 2] = scale * ground_truth[:, 2]
+    elif dw < dh:
+        scale = height / input_size[1]
+        ground_truth[:, 1] = scale * (ground_truth[:, 1] - 0.5) + 0.5
+        ground_truth[:, 3] = scale * ground_truth[:, 3]
+
+    return padded_image, ground_truth
+
+
 @tf.function
 def coco_to_yolo(features):
     objects = features["objects"]
@@ -295,6 +344,16 @@ def coco_to_yolo(features):
     modified_bboxes = tf.concat(
         [position, tf.cast(labels, tf.float32)], axis=1)
 
+
+    image = features["image"]
+    image, modified_bboxes = tf.numpy_function(
+        func=resize_image,
+        inp=[image, modified_bboxes],
+        Tout=[tf.uint8, tf.float32]
+    )
+
+    image = tf.truediv(tf.cast(image, dtype=tf.float32), tf.constant(255.0))
+
     ground_truth = tf.numpy_function(
         func=bboxes_to_ground_truth,
         inp=[modified_bboxes],
@@ -302,7 +361,7 @@ def coco_to_yolo(features):
     )
 
     yolo_features = {
-        "image": features["image"],
+        "image": image,
         "image/filename": features["image/filename"],
         "image/id": features["image/id"],
         "ground_truth": {
@@ -315,25 +374,25 @@ def coco_to_yolo(features):
     return yolo_features
 
 
-# for example in ds_train.skip(5).take(1):
+for example in ds_train.skip(5).take(1):
 
-#     mapped = coco_to_yolo(example)
-#     image = mapped["image"]
-#     print(image.shape)
-#     print(mapped["ground_truth"])
-#     # plt.imshow(image)
-#     # plt.show()
+    mapped = coco_to_yolo(example)
+    image = mapped["image"]
+    print(image.shape)
+    # print(mapped["ground_truth"])
+    plt.imshow(image)
+    plt.show()
 
-ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-ds_train = ds_train.cache()
-ds_train = ds_train.shuffle(1000)
-ds_train = ds_train.batch(batch_size)
-ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
+# ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+# ds_train = ds_train.cache()
+# ds_train = ds_train.shuffle(1000)
+# ds_train = ds_train.batch(batch_size)
+# ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
-ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-ds_val = ds_val.batch(batch_size)
-ds_val = ds_val.cache()
-ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
+# ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+# ds_val = ds_val.batch(batch_size)
+# ds_val = ds_val.cache()
+# ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
 # # In[10]:
 
