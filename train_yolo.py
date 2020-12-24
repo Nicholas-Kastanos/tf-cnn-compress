@@ -44,6 +44,8 @@
 
 # In[1]:
 
+from datetime import datetime
+import tensorboard
 from typing import Tuple
 import matplotlib.pyplot as plt
 from src.yolov4.yolov4 import YOLOv4
@@ -357,24 +359,26 @@ def coco_to_yolo(features):
     return (image, [ground_truth[0], ground_truth[1], ground_truth[2]])
 
 
-# for example in ds_train.skip(5).take(1):
+for example in ds_train.skip(5).take(1):
 
-#     mapped = coco_to_yolo(example)
-#     image = mapped[0]
-#     ground_truth = mapped[1]
-#     for gt in ground_truth:
-#         print(tf.shape(gt))
-#     print(image.shape)
-#     plt.imshow(image)
-#     plt.show()
+    mapped = coco_to_yolo(example)
+    image = mapped[0]
+    ground_truth = mapped[1]
+    for gt in ground_truth:
+        print(tf.shape(gt))
+    print(image.shape)
+    plt.imshow(image)
+    plt.show()
 
-ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.map(
+    coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 ds_train = ds_train.cache()
 ds_train = ds_train.shuffle(1000)
 ds_train = ds_train.batch(batch_size)
 ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
-ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_val = ds_val.map(
+    coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 ds_val = ds_val.batch(batch_size)
 ds_val = ds_val.cache()
 ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
@@ -383,7 +387,9 @@ ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
 
 epochs = 1
-lr=1e-4
+lr = 1e-4
+
+
 def lr_scheduler(epoch):
     if epoch < int(epochs * 0.5):
         return lr
@@ -424,11 +430,9 @@ yolo.compile(
     )
 )
 
-import tensorboard
-from datetime import datetime
 print("Tensorboard Version: ", tensorboard.__version__)
 
-logdir="logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+logdir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
 
 verbose = 2
@@ -438,9 +442,9 @@ callbacks = [
     tensorboard_callback
 ]
 initial_epoch = 0
-steps_per_epoch = 10#100
-validation_steps = 5#50
-validation_freq = 1#5
+steps_per_epoch = 10  # 100
+validation_steps = 5  # 50
+validation_freq = 1  # 5
 
 
 # # # In[ ]:
@@ -451,10 +455,10 @@ yolo.fit(
     verbose=verbose,
     callbacks=callbacks,
     validation_data=ds_val,
-    initial_epoch=initial_epoch,
-    steps_per_epoch=steps_per_epoch,
-    validation_steps=validation_steps,
-    validation_freq=validation_freq
+    # initial_epoch=initial_epoch,
+    # steps_per_epoch=steps_per_epoch,
+    # validation_steps=validation_steps,
+    # validation_freq=validation_freq
 )
 
 
