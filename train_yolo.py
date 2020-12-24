@@ -358,34 +358,35 @@ def coco_to_yolo(features):
         "image": image,
         "image/filename": features["image/filename"],
         "image/id": features["image/id"],
-        "ground_truth": {
-            "small": ground_truth[0],
-            "medium": ground_truth[1],
-            "large": ground_truth[2]
-        }  # same output as dataset.Dataset.bboxes_to_ground_truth
+        "ground_truth": [ground_truth[0], ground_truth[1], ground_truth[2]]
     }
 
     return yolo_features
 
 
-# for example in ds_train.skip(5).take(1):
+for example in ds_train.skip(5).take(1):
 
-#     mapped = coco_to_yolo(example)
-#     image = mapped["image"]
-#     print(image.shape)
-#     plt.imshow(image)
-#     plt.show()
+    mapped = coco_to_yolo(example)
+    image = mapped["image"]
+    ground_truth = mapped["ground_truth"]
+    # print(ground_truth)
+    # print(len(ground_truth))
+    for gt in ground_truth:
+        print(tf.shape(gt))
+    print(image.shape)
+    plt.imshow(image)
+    plt.show()
 
-ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-ds_train = ds_train.cache()
-ds_train = ds_train.shuffle(1000)
-ds_train = ds_train.batch(batch_size)
-ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
+# ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+# ds_train = ds_train.cache()
+# ds_train = ds_train.shuffle(1000)
+# ds_train = ds_train.batch(batch_size)
+# ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
-ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-ds_val = ds_val.batch(batch_size)
-ds_val = ds_val.cache()
-ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
+# ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+# ds_val = ds_val.batch(batch_size)
+# ds_val = ds_val.cache()
+# ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
 # # In[10]:
 
