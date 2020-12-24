@@ -357,106 +357,105 @@ def coco_to_yolo(features):
     return (image, [ground_truth[0], ground_truth[1], ground_truth[2]])
 
 
-for example in ds_train.skip(5).take(1):
+# for example in ds_train.skip(5).take(1):
 
-    mapped = coco_to_yolo(example)
-    image = mapped[0]
-    ground_truth = mapped[1]
-    for gt in ground_truth:
-        print(tf.shape(gt))
-    print(image.shape)
-    plt.imshow(image)
-    plt.show()
+#     mapped = coco_to_yolo(example)
+#     image = mapped[0]
+#     ground_truth = mapped[1]
+#     for gt in ground_truth:
+#         print(tf.shape(gt))
+#     print(image.shape)
+#     plt.imshow(image)
+#     plt.show()
 
-# ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-# ds_train = ds_train.cache()
-# ds_train = ds_train.shuffle(1000)
-# ds_train = ds_train.batch(batch_size)
-# ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.cache()
+ds_train = ds_train.shuffle(1000)
+ds_train = ds_train.batch(batch_size)
+ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
-# ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-# ds_val = ds_val.batch(batch_size)
-# ds_val = ds_val.cache()
-# ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
+ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_val = ds_val.batch(batch_size)
+ds_val = ds_val.cache()
+ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
 # # In[10]:
 
 
-# epochs = 1
-# lr=1e-4
-# def lr_scheduler(epoch):
-#     if epoch < int(epochs * 0.5):
-#         return lr
-#     if epoch < int(epochs * 0.8):
-#         return lr * 0.5
-#     if epoch < int(epochs * 0.9):
-#         return lr * 0.1
-#     return lr * 0.01
+epochs = 1
+lr=1e-4
+def lr_scheduler(epoch):
+    if epoch < int(epochs * 0.5):
+        return lr
+    if epoch < int(epochs * 0.8):
+        return lr * 0.5
+    if epoch < int(epochs * 0.9):
+        return lr * 0.1
+    return lr * 0.01
 
 
 # # # In[13]:
 
 
-# backend.clear_session()
-# inputs = layers.Input([input_size[1], input_size[0], 3])
-# yolo = YOLOv4(
-#     anchors=anchors,
-#     num_classes=len(num_classes),
-#     xyscales=xyscales,
-#     kernel_regularizer=regularizers.l2(0.0005)
-# )
-# yolo(inputs)
+backend.clear_session()
+inputs = layers.Input([input_size[0], input_size[1], 3])
+yolo = YOLOv4(
+    anchors=anchors,
+    num_classes=num_classes,
+    xyscales=xyscales,
+    kernel_regularizer=regularizers.l2(0.0005)
+)
+yolo(inputs)
 
 
 # # # In[14]:
 
 
-# optimizer = optimizers.Adam(learning_rate=lr)
-# loss_iou_type = "ciou"
-# loss_verbose = 1
+optimizer = optimizers.Adam(learning_rate=lr)
+loss_iou_type = "ciou"
+loss_verbose = 1
 
-# yolo.compile(
-#     optimizer=optimizer,
-#     loss=train.YOLOv4Loss(
-#         batch_size=batch_size,
-#         iou_type=loss_iou_type,
-#         verbose=loss_verbose
-#     )
-# )
+yolo.compile(
+    optimizer=optimizer,
+    loss=train.YOLOv4Loss(
+        batch_size=batch_size,
+        iou_type=loss_iou_type,
+        verbose=loss_verbose
+    )
+)
 
-# import tensorboard
-# from datetime import datetime
-# print("Tensorboard Version: ", tensorboard.__version__)
+import tensorboard
+from datetime import datetime
+print("Tensorboard Version: ", tensorboard.__version__)
 
-# logdir="logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
-# tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
+logdir="logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
 
-# verbose = 2
-# callbacks = [
-#     callbacks.LearningRateScheduler(lr_scheduler),
-#     callbacks.TerminateOnNaN(),
-#     tensorboard_callback
-# ]
-# initial_epoch = 0
-# steps_per_epoch = 10#100
-# validation_steps = 5#50
-# validation_freq = 1#5
+verbose = 2
+callbacks = [
+    callbacks.LearningRateScheduler(lr_scheduler),
+    callbacks.TerminateOnNaN(),
+    tensorboard_callback
+]
+initial_epoch = 0
+steps_per_epoch = 10#100
+validation_steps = 5#50
+validation_freq = 1#5
 
 
 # # # In[ ]:
 
-# yolo.fit(
-#     ds_train,
-#     batch_size=batch_size,
-#     epochs=epochs,
-#     verbose=verbose,
-#     callbacks=callbacks,
-#     validation_data=ds_val,
-#     initial_epoch=initial_epoch,
-#     steps_per_epoch=steps_per_epoch,
-#     validation_steps=validation_steps,
-#     validation_freq=validation_freq
-# )
+yolo.fit(
+    ds_train,
+    epochs=epochs,
+    verbose=verbose,
+    callbacks=callbacks,
+    validation_data=ds_val,
+    initial_epoch=initial_epoch,
+    steps_per_epoch=steps_per_epoch,
+    validation_steps=validation_steps,
+    validation_freq=validation_freq
+)
 
 
 # # # In[ ]:
