@@ -354,23 +354,14 @@ def coco_to_yolo(features):
         Tout=[tf.float32 for _size in grid_size]
     )
 
-    yolo_features = {
-        "image": image,
-        "image/filename": features["image/filename"],
-        "image/id": features["image/id"],
-        "ground_truth": [ground_truth[0], ground_truth[1], ground_truth[2]]
-    }
-
-    return yolo_features
+    return (image, [ground_truth[0], ground_truth[1], ground_truth[2]])
 
 
 for example in ds_train.skip(5).take(1):
 
     mapped = coco_to_yolo(example)
-    image = mapped["image"]
-    ground_truth = mapped["ground_truth"]
-    # print(ground_truth)
-    # print(len(ground_truth))
+    image = mapped[0]
+    ground_truth = mapped[1]
     for gt in ground_truth:
         print(tf.shape(gt))
     print(image.shape)
