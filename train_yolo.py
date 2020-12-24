@@ -155,6 +155,12 @@ grid_size = (input_size[1], input_size[0]) // np.stack(
 )
 label_smoothing = 0.1
 num_classes = ds_info.features["objects"]["label"].num_classes
+class_dict = dict(
+    zip(
+        range(ds_info.features["objects"]["label"].num_classes),
+        ds_info.features["objects"]["label"].names
+    )
+)
 
 grid_xy = [
     np.tile(
@@ -173,6 +179,7 @@ grid_xy = [
     for _size in grid_size  # (height, width)
 ]
 
+
 def bboxes_to_ground_truth(bboxes):
     ground_truth = [
         np.zeros(
@@ -183,8 +190,8 @@ def bboxes_to_ground_truth(bboxes):
                     3,
                     5 + num_classes,
                 ),
-                dtype=np.float32,
-            )
+            dtype=np.float32,
+        )
         for _size in grid_size
     ]
 
@@ -255,6 +262,7 @@ def resize_image(
     image,
     ground_truth
 ):
+    image = tf.cast(image, tf.float32) / 255.0
     height, width, _ = image.shape
 
     if width / height >= input_size[0] / input_size[1]:
@@ -266,26 +274,15 @@ def resize_image(
     if scale != 1:
         width = int(round(width * scale))
         height = int(round(height * scale))
-        resized_image = tf.image.resize(image, (width, height))
+        padded_image = tf.image.resize_with_pad(
+            image, input_size[1], input_size[0])
     else:
-        resized_image = np.copy(image)
+        padded_image = np.copy(image)
 
-    # Pad
+    # Resize ground truth
     dw = input_size[0] - width
     dh = input_size[1] - height
 
-    if not (dw == 0 and dh == 0):
-        dw = dw // 2
-        dh = dh // 2
-        # height, width, channels
-        padded_image = np.full(
-            (input_size[0], input_size[1], 3), 255, dtype=np.uint8
-        )
-        padded_image[dw: width + dw, dh: height + dh, :] = resized_image
-    else:
-        padded_image = resized_image
-
-    # Resize ground truth
     ground_truth = np.copy(ground_truth)
 
     if dw > dh:
@@ -344,15 +341,12 @@ def coco_to_yolo(features):
     modified_bboxes = tf.concat(
         [position, tf.cast(labels, tf.float32)], axis=1)
 
-
     image = features["image"]
     image, modified_bboxes = tf.numpy_function(
         func=resize_image,
         inp=[image, modified_bboxes],
-        Tout=[tf.uint8, tf.float32]
+        Tout=[tf.float32, tf.float32]
     )
-
-    image = tf.truediv(tf.cast(image, dtype=tf.float32), tf.constant(255.0))
 
     ground_truth = tf.numpy_function(
         func=bboxes_to_ground_truth,
@@ -374,25 +368,24 @@ def coco_to_yolo(features):
     return yolo_features
 
 
-for example in ds_train.skip(5).take(1):
+# for example in ds_train.skip(5).take(1):
 
-    mapped = coco_to_yolo(example)
-    image = mapped["image"]
-    print(image.shape)
-    # print(mapped["ground_truth"])
-    plt.imshow(image)
-    plt.show()
+#     mapped = coco_to_yolo(example)
+#     image = mapped["image"]
+#     print(image.shape)
+#     plt.imshow(image)
+#     plt.show()
 
-# ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-# ds_train = ds_train.cache()
-# ds_train = ds_train.shuffle(1000)
-# ds_train = ds_train.batch(batch_size)
-# ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.cache()
+ds_train = ds_train.shuffle(1000)
+ds_train = ds_train.batch(batch_size)
+ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
 
-# ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-# ds_val = ds_val.batch(batch_size)
-# ds_val = ds_val.cache()
-# ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
+ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+ds_val = ds_val.batch(batch_size)
+ds_val = ds_val.cache()
+ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
 # # In[10]:
 
