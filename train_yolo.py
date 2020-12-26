@@ -61,64 +61,10 @@ from tensorflow.keras import backend, layers, optimizers, regularizers, callback
 from tensorflow import keras
 import tensorflow as tf
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 gpus = tf.config.experimental.list_physical_devices('GPU')
 print(gpus)
-
-# class_names_path = os.path.join(os.getcwd(), "dataset", "coco.names")
-# classes = media.read_classes_names(class_names_path)
-
-
-# # In[7]:
-
-
-# def load_dataset(
-#     dataset_path,
-#     dataset_type="converted_coco",
-#     label_smoothing=0.1,
-#     image_path_prefix=None,
-#     training=True,
-# ):
-#     return dataset.Dataset(
-#         anchors=anchors,
-#         batch_size=batch_size,
-#         dataset_path=dataset_path,
-#         dataset_type=dataset_type,
-#         data_augmentation=training,
-#         input_size=input_size,
-#         label_smoothing=label_smoothing,
-#         num_classes=len(classes),
-#         image_path_prefix=image_path_prefix,
-#         strides=strides,
-#         xyscales=xyscales,
-#     )
-
-
-# # In[8]:
-
-
-# train_data_set = load_dataset(
-#     os.path.join(os.getcwd(), "dataset", "train2017.txt"),
-#     # image_path_prefix=os.path.join(os.getcwd(), 'archives', 'train2017.zip'),
-#     image_path_prefix=os.path.join('/', 'media', 'nicholas', 'Data','nicho','Documents','ACS','L46','Project', 'train2017'),
-#     label_smoothing=0.05
-# )
-
-# print(type(train_data_set.dataset))
-# old_example = train_data_set.dataset[0]
-# print(type(old_example))
-# print(old_example)
-
-# # In[9]:
-
-
-# val_data_set = load_dataset(
-#     os.path.join(os.getcwd(), "dataset", "val2017.txt"),
-#     # image_path_prefix=os.path.join(os.getcwd(), 'dataset', 'archives', 'val2017.zip'),
-#     image_path_prefix=os.path.join('/', 'media', 'nicholas', 'Data','nicho','Documents','ACS','L46','Project', 'val2017'),
-#     label_smoothing=0.05
-# )
 
 try:
     import google.colab
@@ -151,7 +97,7 @@ xyscales = np.array([1.2, 1.1, 1.05])
 input_size = (416, 416)
 
 anchors_ratio = anchors / input_size[0]
-batch_size = 32
+batch_size = 1
 grid_size = (input_size[1], input_size[0]) // np.stack(
     (strides, strides), axis=1
 )
@@ -355,20 +301,26 @@ def coco_to_yolo(features):
         inp=[modified_bboxes],
         Tout=[tf.float32 for _size in grid_size]
     )
+    
+    image.set_shape([input_size[0],input_size[1], 3])
 
-    return (image, [ground_truth[0], ground_truth[1], ground_truth[2]])
+    ground_truth[0].set_shape((1, 52, 52, 3, 85))
+    ground_truth[1].set_shape((1, 26, 26, 3, 85))
+    ground_truth[2].set_shape((1, 13, 13, 3, 85))
+
+    return (image, (ground_truth[0], ground_truth[1], ground_truth[2]))
 
 
-for example in ds_train.skip(5).take(1):
+# for example in ds_train.skip(5).take(1):
 
-    mapped = coco_to_yolo(example)
-    image = mapped[0]
-    ground_truth = mapped[1]
-    for gt in ground_truth:
-        print(tf.shape(gt))
-    print(image.shape)
-    plt.imshow(image)
-    plt.show()
+#     mapped = coco_to_yolo(example)
+#     image = mapped[0]
+#     ground_truth = mapped[1]
+#     # for gt in ground_truth:
+#         # print(tf.shape(gt))
+#     # print(image.shape)
+#     # plt.imshow(image)
+#     # plt.show()
 
 ds_train = ds_train.map(
     coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -384,6 +336,7 @@ ds_val = ds_val.cache()
 ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
 # # In[10]:
+
 
 
 epochs = 1
