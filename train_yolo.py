@@ -1,49 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
-
-
-# import os
-# import urllib.request
-# urllib.request.urlretrieve('https://github.com/Nicholas-Kastanos/tf-yolov4-compress/archive/main.zip','tf-yolov4-compress.zip')
-
-
-# In[ ]:
-
-
-# get_ipython().run_line_magic('rm', '-r sample_data')
-# get_ipython().system('unzip tf-yolov4-compress')
-# get_ipython().run_line_magic('cd', 'tf-yolov4-compress-main/')
-# get_ipython().run_line_magic('pwd', '')
-
-
-# In[ ]:
-
-
-# get_ipython().run_line_magic('tensorflow_version', '2.x')
-# print("Using TensorFlow version", tf.__version__)
-
-
-# In[ ]:
-
-
-# get_ipython().system('nvidia-smi')
-
-
-# In[ ]:
-
-
-# This wont run on Colab. There is not enough storage on the kernel
-# get_ipython().system('mkdir -p dataset/archives/')
-# get_ipython().system('curl http://images.cocodataset.org/zips/train2017.zip --output dataset/archives/train2017.zip')
-# get_ipython().system('curl http://images.cocodataset.org/zips/val2017.zip --output dataset/archives/val2017.zip')
-# get_ipython().system('unzip dataset/archives/train2017.zip')
-# get_ipython().system('unzip dataset/archives/val2017.zip')
-
-
-# In[1]:
-
 from datetime import datetime
 import tensorboard
 from typing import Tuple
@@ -95,7 +52,6 @@ anchors = np.array([
 strides = np.array([8, 16, 32])
 xyscales = np.array([1.2, 1.1, 1.05])
 input_size = (416, 416)
-
 anchors_ratio = anchors / input_size[0]
 batch_size = 1
 grid_size = (input_size[1], input_size[0]) // np.stack(
@@ -335,10 +291,6 @@ ds_val = ds_val.batch(batch_size)
 ds_val = ds_val.cache()
 ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
 
-# # In[10]:
-
-
-
 epochs = 1
 lr = 1e-4
 
@@ -353,9 +305,6 @@ def lr_scheduler(epoch):
     return lr * 0.01
 
 
-# # # In[13]:
-
-
 backend.clear_session()
 inputs = layers.Input([input_size[0], input_size[1], 3])
 yolo = YOLOv4(
@@ -365,10 +314,6 @@ yolo = YOLOv4(
     kernel_regularizer=regularizers.l2(0.0005)
 )
 yolo(inputs)
-
-
-# # # In[14]:
-
 
 optimizer = optimizers.Adam(learning_rate=lr)
 loss_iou_type = "ciou"
@@ -399,9 +344,6 @@ steps_per_epoch = 10  # 100
 validation_steps = 5  # 50
 validation_freq = 1  # 5
 
-
-# # # In[ ]:
-
 yolo.fit(
     ds_train,
     epochs=epochs,
@@ -413,6 +355,3 @@ yolo.fit(
     # validation_steps=validation_steps,
     # validation_freq=validation_freq
 )
-
-
-# # # In[ ]:
