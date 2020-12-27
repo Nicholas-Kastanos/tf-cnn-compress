@@ -6,13 +6,11 @@ import tensorboard
 from typing import Tuple
 import matplotlib.pyplot as plt
 from src.yolov4.yolov4 import YOLOv4
-import src.dataset as dataset
+# import src.dataset as dataset
 import src.train as train
-import src.predict as predict
-import src.media as media
+# import src.predict as predict
+# import src.media as media
 import numpy as np
-from tensorflow_datasets.core.features import FeaturesDict, BBoxFeature
-from tensorflow_datasets.core.dataset_info import DatasetInfo
 import tensorflow_datasets as tfds
 from tensorflow.keras import backend, layers, optimizers, regularizers, callbacks
 from tensorflow import keras
@@ -257,8 +255,8 @@ def coco_to_yolo(features):
         inp=[modified_bboxes],
         Tout=[tf.float32 for _size in grid_size]
     )
-    
-    image.set_shape([input_size[0],input_size[1], 3])
+
+    image.set_shape([input_size[0], input_size[1], 3])
 
     ground_truth[0].set_shape((1, 52, 52, 3, 85))
     ground_truth[1].set_shape((1, 26, 26, 3, 85))
@@ -278,20 +276,13 @@ def coco_to_yolo(features):
 #     # plt.imshow(image)
 #     # plt.show()
 
-ds_train = ds_train.map(
-    coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-ds_train = ds_train.cache()
-ds_train = ds_train.shuffle(1000)
-ds_train = ds_train.batch(batch_size)
-ds_train = ds_train.prefetch(tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).cache(
+).shuffle(1000).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
-ds_val = ds_val.map(
-    coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-ds_val = ds_val.batch(batch_size)
-ds_val = ds_val.cache()
-ds_val = ds_val.prefetch(tf.data.experimental.AUTOTUNE)
+ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(
+    batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
 
-epochs = 1
+epochs = 400
 lr = 1e-4
 
 
@@ -317,7 +308,7 @@ yolo(inputs)
 
 optimizer = optimizers.Adam(learning_rate=lr)
 loss_iou_type = "ciou"
-loss_verbose = 1
+loss_verbose = 0
 
 yolo.compile(
     optimizer=optimizer,
@@ -331,27 +322,29 @@ yolo.compile(
 print("Tensorboard Version: ", tensorboard.__version__)
 
 logdir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
-tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
+tensorboard_callback = keras.callbacks.TensorBoard(
+    log_dir=logdir, histogram_freq=10)
 
-verbose = 2
 callbacks = [
     callbacks.LearningRateScheduler(lr_scheduler),
     callbacks.TerminateOnNaN(),
     tensorboard_callback
 ]
-initial_epoch = 0
-steps_per_epoch = 10  # 100
-validation_steps = 5  # 50
-validation_freq = 1  # 5
 
+steps_per_epoch = 100
+validation_steps = 50
+validation_freq = 5
+
+yolo.summary()
+
+# verbose = 0
 yolo.fit(
     ds_train,
     epochs=epochs,
-    verbose=verbose,
+    # verbose=verbose,
     callbacks=callbacks,
     validation_data=ds_val,
-    # initial_epoch=initial_epoch,
-    # steps_per_epoch=steps_per_epoch,
-    # validation_steps=validation_steps,
-    # validation_freq=validation_freq
+    steps_per_epoch=steps_per_epoch,
+    validation_steps=validation_steps,
+    validation_freq=validation_freq
 )
