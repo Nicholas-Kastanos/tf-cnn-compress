@@ -14,6 +14,7 @@ class DarknetConv(layers.Layer):
         activation: str = "mish",
         kernel_regularizer=regularizers.l2(0.0005),
         strides: int = 1,
+        use_asymetrical_conv=True,
         **kwargs
     ):
         super(DarknetConv, self).__init__(**kwargs)
@@ -26,13 +27,29 @@ class DarknetConv(layers.Layer):
         if self.strides[0] == 2:
             self.sequential.add(layers.ZeroPadding2D(((1, 0), (1, 0))))
 
-        self.sequential.add(layers.Conv2D(
-            filters=self.filters,
-            kernel_size=kernel_size,
-            strides=self.strides,
-            padding="same" if self.strides[0] == 1 else "valid",
-            kernel_regularizer=kernel_regularizer
-        ))
+        if use_asymetrical_conv and self.kernel_size == (3, 3) and self.strides == (1, 1):
+            self.sequential.add(layers.Conv2D(
+                filters=self.filters,
+                kernel_size=(self.kernel_size[0], 1),
+                strides=self.strides,
+                padding="same",
+                kernel_regularizer=kernel_regularizer
+            ))
+            self.sequential.add(layers.Conv2D(
+                filters=self.filters,
+                kernel_size=(1, self.kernel_size[1]),
+                strides=self.strides,
+                padding="same",
+                kernel_regularizer=kernel_regularizer
+            ))
+        else:
+            self.sequential.add(layers.Conv2D(
+                filters=self.filters,
+                kernel_size=self.kernel_size,
+                strides=self.strides,
+                padding="same" if self.strides[0] == 1 else "valid",
+                kernel_regularizer=kernel_regularizer
+            ))
 
         if self.activation is not None:
             self.sequential.add(layers.BatchNormalization())
@@ -57,9 +74,10 @@ class DarknetResidual(layers.Layer):
         filters_1: int,
         filters_2: int,
         activation: str = "mish",
-        kernel_regularizer=None
+        kernel_regularizer=None,
+        **kwargs
     ):
-        super(DarknetResidual, self).__init__()
+        super(DarknetResidual, self).__init__(**kwargs)
         self.conv_1 = DarknetConv(
             filters=filters_1,
             kernel_size=1,
@@ -89,9 +107,10 @@ class ResidualBlock(layers.Layer):
         filters_1: int,
         filters_2: int,
         activation: str = "mish",
-        kernel_regularizer=None
+        kernel_regularizer=None,
+        **kwargs
     ):
-        super(ResidualBlock, self).__init__()
+        super(ResidualBlock, self).__init__(**kwargs)
         self.sequential = Sequential()
         for _ in range(iterations):
             self.sequential.add(
@@ -114,9 +133,10 @@ class DarknetResidualBlock(layers.Layer):
         filters_1: int,
         filters_2: int,
         activation: str = "mish",
-        kernel_regularizer=None
+        kernel_regularizer=None,
+        **kwargs
     ):
-        super(DarknetResidualBlock, self).__init__()
+        super(DarknetResidualBlock, self).__init__(**kwargs)
 
         self.sequential = Sequential()
 
@@ -151,9 +171,10 @@ class CSPResidualBlock(layers.Layer):
         filters_1: int,
         filters_2: int,
         activation: str = "mish",
-        kernel_regularizer=None
+        kernel_regularizer=None,
+        **kwargs
     ):
-        super(CSPResidualBlock, self).__init__()
+        super(CSPResidualBlock, self).__init__(**kwargs)
         self.part1_conv = DarknetConv(
             filters=filters_2,
             kernel_size=1,
@@ -198,9 +219,10 @@ class CSPDarknetResidualBlock(layers.Layer):
         filters_1: int,
         filters_2: int,
         activation: str = "mish",
-        kernel_regularizer=None
+        kernel_regularizer=None,
+        **kwargs
     ):
-        super(CSPDarknetResidualBlock, self).__init__()
+        super(CSPDarknetResidualBlock, self).__init__(**kwargs)
 
         self.sequential = Sequential()
 
