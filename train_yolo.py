@@ -19,7 +19,7 @@ import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 gpus = tf.config.experimental.list_physical_devices('GPU')
-print(gpus)
+# print(gpus)
 
 try:
     import google.colab
@@ -49,20 +49,25 @@ anchors = np.array([
 ]).astype(np.float32).reshape(3, 3, 2)
 strides = np.array([8, 16, 32])
 xyscales = np.array([1.2, 1.1, 1.05])
-input_size = (416, 416)
+input_size = (256, 256)  # (416, 416)
 anchors_ratio = anchors / input_size[0]
-batch_size = 1
+batch_size = 3
 grid_size = (input_size[1], input_size[0]) // np.stack(
     (strides, strides), axis=1
 )
 label_smoothing = 0.1
-num_classes = ds_info.features["objects"]["label"].num_classes
+included_classes = ds_info.features["objects"]["label"].names[:20]
+num_classes = len(included_classes)
 class_dict = dict(
     zip(
-        range(ds_info.features["objects"]["label"].num_classes),
-        ds_info.features["objects"]["label"].names
+        range(num_classes),
+        included_classes
     )
 )
+included_classes_idxs = np.asarray(list(class_dict.keys()))
+
+print(class_dict)
+print(num_classes)
 
 grid_xy = [
     np.tile(
@@ -81,8 +86,17 @@ grid_xy = [
     for _size in grid_size  # (height, width)
 ]
 
+chance_to_remove_person_only_images = 0.5
+
 
 def bboxes_to_ground_truth(bboxes):
+    """
+        @param bboxes: [[b_x, b_y, b_w, b_h, class_id], ...]
+
+        @return [s, m, l] or [s, l]
+            Dim(1, grid_y, grid_x, anchors,
+                                (b_x, b_y, b_w, b_h, conf, prob_0, prob_1, ...))
+        """
     ground_truth = [
         np.zeros(
                 (
@@ -199,6 +213,9 @@ def resize_image(
     return padded_image, ground_truth
 
 
+def exclude_classes(modified_bboxes):
+    return modified_bboxes[np.isin(modified_bboxes[:, -1], included_classes_idxs)]
+
 @tf.function
 def coco_to_yolo(features):
     objects = features["objects"]
@@ -243,6 +260,24 @@ def coco_to_yolo(features):
     modified_bboxes = tf.concat(
         [position, tf.cast(labels, tf.float32)], axis=1)
 
+    # Filters bboxes to included classes
+    modified_bboxes = tf.numpy_function(
+        func=exclude_classes,
+        inp=[modified_bboxes],
+        Tout=tf.float32
+    )
+
+    # Random chance to remove pictures with only people in them
+    is_all_people = modified_bboxes[:, 4] == tf.zeros(
+        tf.shape(modified_bboxes[:, 4]))
+
+    if tf.reduce_all(is_all_people):
+        tf.print("is all people")
+        if tf.random.uniform(shape=()) < tf.constant(chance_to_remove_person_only_images):
+            tf.print("removing")
+            modified_bboxes = tf.reshape(tf.convert_to_tensor(()), (0, 5))
+
+
     image = features["image"]
     image, modified_bboxes = tf.numpy_function(
         func=resize_image,
@@ -265,22 +300,28 @@ def coco_to_yolo(features):
     return (image, (ground_truth[0], ground_truth[1], ground_truth[2]))
 
 
-# for example in ds_train.skip(5).take(1):
+def filter_fn(image, ground_truth):
+    if(tf.size(ground_truth[0]) == 0):
+        return False
+    return True
 
-#     mapped = coco_to_yolo(example)
-#     image = mapped[0]
-#     ground_truth = mapped[1]
-#     # for gt in ground_truth:
-#         # print(tf.shape(gt))
-#     # print(image.shape)
-#     # plt.imshow(image)
-#     # plt.show()
 
-ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).cache(
-).shuffle(1000).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+for example in ds_train.skip(5).take(1):
 
-ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(
-    batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
+    mapped = coco_to_yolo(example)
+    image = mapped[0]
+    ground_truth = mapped[1]
+    # for gt in ground_truth:
+    # print(tf.shape(gt))
+    # print(image.shape)
+    # plt.imshow(image)
+    # plt.show()
+
+ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
+    filter_fn).cache().shuffle(1000).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+
+ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
+    filter_fn).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
 
 epochs = 400
 lr = 1e-4
@@ -319,7 +360,7 @@ yolo.compile(
     )
 )
 
-print("Tensorboard Version: ", tensorboard.__version__)
+# print("Tensorboard Version: ", tensorboard.__version__)
 
 logdir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = keras.callbacks.TensorBoard(
