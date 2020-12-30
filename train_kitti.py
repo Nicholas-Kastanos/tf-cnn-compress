@@ -35,7 +35,7 @@ else:
 
 
 (ds_train, ds_val), ds_info = tfds.load(
-    'coco/2017',
+    'kitti',
     split=['train', 'test'],
     shuffle_files=True,
     with_info=True,
