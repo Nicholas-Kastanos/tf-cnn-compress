@@ -14,7 +14,7 @@ class DarknetConv(layers.Layer):
         activation: str = "mish",
         kernel_regularizer=regularizers.l2(0.0005),
         strides: int = 1,
-        use_asymetrical_conv=True,
+        use_asymetrical_conv=False,
         **kwargs
     ):
         super(DarknetConv, self).__init__(**kwargs)
@@ -75,6 +75,7 @@ class DarknetResidual(layers.Layer):
         filters_2: int,
         activation: str = "mish",
         kernel_regularizer=None,
+        use_asymetrical_conv=False,
         **kwargs
     ):
         super(DarknetResidual, self).__init__(**kwargs)
@@ -82,13 +83,15 @@ class DarknetResidual(layers.Layer):
             filters=filters_1,
             kernel_size=1,
             activation=activation,
-            kernel_regularizer=kernel_regularizer
+            kernel_regularizer=kernel_regularizer,
+            use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_2 = DarknetConv(
             filters=filters_2,
             kernel_size=3,
             activation=activation,
-            kernel_regularizer=kernel_regularizer
+            kernel_regularizer=kernel_regularizer,
+            use_asymetrical_conv=use_asymetrical_conv
         )
         self.add = layers.Add()
 
@@ -108,6 +111,7 @@ class ResidualBlock(layers.Layer):
         filters_2: int,
         activation: str = "mish",
         kernel_regularizer=None,
+        use_asymetrical_conv=False,
         **kwargs
     ):
         super(ResidualBlock, self).__init__(**kwargs)
@@ -118,7 +122,8 @@ class ResidualBlock(layers.Layer):
                     filters_1=filters_1,
                     filters_2=filters_2,
                     activation=activation,
-                    kernel_regularizer=kernel_regularizer
+                    kernel_regularizer=kernel_regularizer,
+                    use_asymetrical_conv=use_asymetrical_conv
                 )
             )
 
@@ -134,6 +139,7 @@ class DarknetResidualBlock(layers.Layer):
         filters_2: int,
         activation: str = "mish",
         kernel_regularizer=None,
+        use_asymetrical_conv=False,
         **kwargs
     ):
         super(DarknetResidualBlock, self).__init__(**kwargs)
@@ -146,7 +152,8 @@ class DarknetResidualBlock(layers.Layer):
                 kernel_size=3,
                 activation=activation,
                 kernel_regularizer=kernel_regularizer,
-                strides=2
+                strides=2,
+                use_asymetrical_conv=use_asymetrical_conv
             )
         )
 
@@ -156,7 +163,8 @@ class DarknetResidualBlock(layers.Layer):
                 filters_1=filters_1,
                 filters_2=filters_2,
                 activation=activation,
-                kernel_regularizer=kernel_regularizer
+                kernel_regularizer=kernel_regularizer,
+                use_asymetrical_conv=use_asymetrical_conv
             )
         )
 
@@ -172,6 +180,7 @@ class CSPResidualBlock(layers.Layer):
         filters_2: int,
         activation: str = "mish",
         kernel_regularizer=None,
+        use_asymetrical_conv=False,
         **kwargs
     ):
         super(CSPResidualBlock, self).__init__(**kwargs)
@@ -179,26 +188,30 @@ class CSPResidualBlock(layers.Layer):
             filters=filters_2,
             kernel_size=1,
             activation=activation,
-            kernel_regularizer=kernel_regularizer
+            kernel_regularizer=kernel_regularizer,
+            use_asymetrical_conv=use_asymetrical_conv
         )
         self.part2_conv1 = DarknetConv(
             filters=filters_2,
             kernel_size=1,
             activation=activation,
-            kernel_regularizer=kernel_regularizer
+            kernel_regularizer=kernel_regularizer,
+            use_asymetrical_conv=use_asymetrical_conv
         )
         self.part2_res = ResidualBlock(
             iterations=iterations,
             filters_1=filters_1,
             filters_2=filters_2,
             activation=activation,
-            kernel_regularizer=kernel_regularizer
+            kernel_regularizer=kernel_regularizer,
+            use_asymetrical_conv=use_asymetrical_conv
         )
         self.part2_conv2 = DarknetConv(
             filters=filters_2,
             kernel_size=1,
             activation=activation,
-            kernel_regularizer=kernel_regularizer
+            kernel_regularizer=kernel_regularizer,
+            use_asymetrical_conv=use_asymetrical_conv
         )
         self.concat1_2 = layers.Concatenate(axis=-1)
     
@@ -220,6 +233,7 @@ class CSPDarknetResidualBlock(layers.Layer):
         filters_2: int,
         activation: str = "mish",
         kernel_regularizer=None,
+        use_asymetrical_conv=False,
         **kwargs
     ):
         super(CSPDarknetResidualBlock, self).__init__(**kwargs)
@@ -232,7 +246,8 @@ class CSPDarknetResidualBlock(layers.Layer):
                 kernel_size=3,
                 activation=activation,
                 kernel_regularizer=kernel_regularizer,
-                strides=2
+                strides=2,
+                use_asymetrical_conv=use_asymetrical_conv
             )
         )
 
@@ -242,7 +257,8 @@ class CSPDarknetResidualBlock(layers.Layer):
                 filters_1=filters_1,
                 filters_2=filters_2,
                 activation=activation,
-                kernel_regularizer=kernel_regularizer
+                kernel_regularizer=kernel_regularizer,
+                use_asymetrical_conv=use_asymetrical_conv
             )
         )
 
@@ -251,7 +267,8 @@ class CSPDarknetResidualBlock(layers.Layer):
                 filters=filters_2,
                 kernel_size=1,
                 activation=activation,
-                kernel_regularizer=kernel_regularizer
+                kernel_regularizer=kernel_regularizer,
+                use_asymetrical_conv=use_asymetrical_conv
             )
         )
     

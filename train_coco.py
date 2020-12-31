@@ -3,7 +3,6 @@
 
 from datetime import datetime
 import tensorboard
-from typing import Tuple
 import matplotlib.pyplot as plt
 from src.yolov4.yolov4 import YOLOv4
 # import src.dataset as dataset
@@ -65,9 +64,6 @@ class_dict = dict(
     )
 )
 included_classes_idxs = np.asarray(list(class_dict.keys()))
-
-print(class_dict)
-print(num_classes)
 
 grid_xy = [
     np.tile(
@@ -187,13 +183,7 @@ def resize_image(
         scale = input_size[1] / height
 
     # Resize
-    if scale != 1:
-        width = int(round(width * scale))
-        height = int(round(height * scale))
-        padded_image = tf.image.resize_with_pad(
-            image, input_size[1], input_size[0])
-    else:
-        padded_image = np.copy(image)
+    padded_image = tf.image.resize_with_pad(image, input_size[1], input_size[0])
 
     # Resize ground truth
     dw = input_size[0] - width
@@ -291,9 +281,8 @@ def coco_to_yolo(features):
 
     image.set_shape([input_size[0], input_size[1], 3])
 
-    ground_truth[0].set_shape((1, 52, 52, 3, 85))
-    ground_truth[1].set_shape((1, 26, 26, 3, 85))
-    ground_truth[2].set_shape((1, 13, 13, 3, 85))
+    for i, _size in enumerate(grid_size):
+        ground_truth[i].set_shape((1, _size[0], _size[1], 3, num_classes + 5))
 
     return (image, (ground_truth[0], ground_truth[1], ground_truth[2]))
 
@@ -321,7 +310,7 @@ ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AU
 ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
     filter_fn).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
 
-epochs = 400
+epochs = 10
 lr = 1e-4
 
 
@@ -341,7 +330,8 @@ yolo = YOLOv4(
     anchors=anchors,
     num_classes=num_classes,
     xyscales=xyscales,
-    kernel_regularizer=regularizers.l2(0.0005)
+    kernel_regularizer=regularizers.l2(0.0005),
+    use_asymetrical_conv=False
 )
 yolo(inputs)
 
@@ -359,8 +349,8 @@ yolo.compile(
 )
 
 # print("Tensorboard Version: ", tensorboard.__version__)
-
-logdir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+timestr = datetime.now().strftime("%Y%m%d-%H%M%S")
+logdir = "logs/coco/fit/" + timestr
 tensorboard_callback = keras.callbacks.TensorBoard(
     log_dir=logdir, histogram_freq=10)
 
@@ -377,13 +367,15 @@ validation_freq = 5
 yolo.summary()
 
 # verbose = 0
-yolo.fit(
-    ds_train,
-    epochs=epochs,
-    # verbose=verbose,
-    callbacks=callbacks,
-    validation_data=ds_val,
-    steps_per_epoch=steps_per_epoch,
-    validation_steps=validation_steps,
-    validation_freq=validation_freq
-)
+# yolo.fit(
+#     ds_train,
+#     epochs=epochs,
+#     # verbose=verbose,
+#     callbacks=callbacks,
+#     validation_data=ds_val,
+#     steps_per_epoch=steps_per_epoch,
+#     validation_steps=validation_steps,
+#     validation_freq=validation_freq
+# )
+
+# yolo.save('./models/coco/' + timestr)

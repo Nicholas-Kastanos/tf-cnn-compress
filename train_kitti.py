@@ -3,7 +3,6 @@
 
 from datetime import datetime
 import tensorboard
-from typing import Tuple
 import matplotlib.pyplot as plt
 from src.yolov4.yolov4 import YOLOv4
 # import src.dataset as dataset
@@ -56,7 +55,7 @@ grid_size = (input_size[1], input_size[0]) // np.stack(
     (strides, strides), axis=1
 )
 label_smoothing = 0.1
-included_classes = ds_info.features["objects"]["label"].names[:20]
+included_classes = ds_info.features["objects"]["occluded"].names
 num_classes = len(included_classes)
 class_dict = dict(
     zip(
@@ -85,9 +84,6 @@ grid_xy = [
     ).astype(np.float32)
     for _size in grid_size  # (height, width)
 ]
-
-chance_to_remove_person_only_images = 0.5
-
 
 def bboxes_to_ground_truth(bboxes):
     """
@@ -187,13 +183,7 @@ def resize_image(
         scale = input_size[1] / height
 
     # Resize
-    if scale != 1:
-        width = int(round(width * scale))
-        height = int(round(height * scale))
-        padded_image = tf.image.resize_with_pad(
-            image, input_size[1], input_size[0])
-    else:
-        padded_image = np.copy(image)
+    padded_image = tf.image.resize_with_pad(image, input_size[1], input_size[0])
 
     # Resize ground truth
     dw = input_size[0] - width
@@ -217,10 +207,10 @@ def exclude_classes(modified_bboxes):
     return modified_bboxes[np.isin(modified_bboxes[:, -1], included_classes_idxs)]
 
 @tf.function
-def coco_to_yolo(features):
+def kitti_to_yolo(features):
     objects = features["objects"]
     bboxes: tf.Tensor = objects["bbox"]
-    labels: tf.Tensor = objects["label"]
+    labels: tf.Tensor = objects["occluded"]
 
     x_center = tf.math.reduce_mean(
         tf.concat(
@@ -260,21 +250,12 @@ def coco_to_yolo(features):
     modified_bboxes = tf.concat(
         [position, tf.cast(labels, tf.float32)], axis=1)
 
-    # Filters bboxes to included classes
-    modified_bboxes = tf.numpy_function(
-        func=exclude_classes,
-        inp=[modified_bboxes],
-        Tout=tf.float32
-    )
-
-    # Random chance to remove pictures with only people in them
-    is_all_people = modified_bboxes[:, 4] == tf.zeros(
-        tf.shape(modified_bboxes[:, 4]))
-
-    if tf.reduce_all(is_all_people):
-        if tf.random.uniform(shape=()) < tf.constant(chance_to_remove_person_only_images):
-            modified_bboxes = tf.reshape(tf.convert_to_tensor(()), (0, 5))
-
+    # # Filters bboxes to included classes
+    # modified_bboxes = tf.numpy_function(
+    #     func=exclude_classes,
+    #     inp=[modified_bboxes],
+    #     Tout=tf.float32
+    # )
 
     image = features["image"]
     image, modified_bboxes = tf.numpy_function(
@@ -291,9 +272,8 @@ def coco_to_yolo(features):
 
     image.set_shape([input_size[0], input_size[1], 3])
 
-    ground_truth[0].set_shape((1, 52, 52, 3, 85))
-    ground_truth[1].set_shape((1, 26, 26, 3, 85))
-    ground_truth[2].set_shape((1, 13, 13, 3, 85))
+    for i, _size in enumerate(grid_size):
+        ground_truth[i].set_shape((1, _size[0], _size[1], 3, num_classes + 5))
 
     return (image, (ground_truth[0], ground_truth[1], ground_truth[2]))
 
@@ -303,25 +283,24 @@ def filter_fn(image, ground_truth):
         return False
     return True
 
+# for example in ds_train.skip(5).take(1):
 
-for example in ds_train.skip(5).take(1):
+#     mapped = kitti_to_yolo(example)
+#     image = mapped[0]
+#     ground_truth = mapped[1]
+#     # for gt in ground_truth:
+#     # print(tf.shape(gt))
+#     # print(image.shape)
+#     # plt.imshow(image)
+#     # plt.show()
 
-    mapped = coco_to_yolo(example)
-    image = mapped[0]
-    ground_truth = mapped[1]
-    # for gt in ground_truth:
-    # print(tf.shape(gt))
-    # print(image.shape)
-    # plt.imshow(image)
-    # plt.show()
-
-ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
+ds_train = ds_train.map(kitti_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
     filter_fn).cache().shuffle(1000).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
-ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
+ds_val = ds_val.map(kitti_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
     filter_fn).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
 
-epochs = 400
+epochs = 10
 lr = 1e-4
 
 
@@ -359,8 +338,8 @@ yolo.compile(
 )
 
 # print("Tensorboard Version: ", tensorboard.__version__)
-
-logdir = "logs/fit/" + datetime.now().strftime("%Y%m%d-%H%M%S")
+timestr = datetime.now().strftime("%Y%m%d-%H%M%S")
+logdir = "logs/kitti/fit/" + timestr
 tensorboard_callback = keras.callbacks.TensorBoard(
     log_dir=logdir, histogram_freq=10)
 
@@ -387,3 +366,5 @@ yolo.fit(
     validation_steps=validation_steps,
     validation_freq=validation_freq
 )
+
+yolo.save('./models/kitti/' + timestr
