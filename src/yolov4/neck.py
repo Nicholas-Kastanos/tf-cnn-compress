@@ -10,11 +10,12 @@ class PANet(layers.Layer):
         num_classes: int,
         activation: str = "leaky",
         kernel_regularizer=None,
-        use_asymetrical_conv=False
+        use_asymetrical_conv=False,
+        first_filter_size=32
     ):
         super(PANet, self).__init__(name="PANet")
         self.conv_0 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -22,7 +23,7 @@ class PANet(layers.Layer):
         )
         self.upSampling_0 = layers.UpSampling2D(interpolation="bilinear")
         self.conv_1 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -31,35 +32,35 @@ class PANet(layers.Layer):
         self.concat_0_1 = layers.Concatenate(axis=-1)
 
         self.conv_2 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_3 = DarknetConv(
-            filters=512,
+            filters=first_filter_size * 16,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_4 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_5 = DarknetConv(
-            filters=512,
+            filters=first_filter_size * 16,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_6 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -67,7 +68,7 @@ class PANet(layers.Layer):
         )
 
         self.conv_7 = DarknetConv(
-            filters=128,
+            filters= first_filter_size * 4,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -75,7 +76,7 @@ class PANet(layers.Layer):
         )
         self.upSampling_7 = layers.UpSampling2D(interpolation="bilinear")
         self.conv_8 = DarknetConv(
-            filters=128,
+            filters=first_filter_size * 4,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -84,35 +85,35 @@ class PANet(layers.Layer):
         self.concat_7_8 = layers.Concatenate(axis=-1)
 
         self.conv_9 = DarknetConv(
-            filters=128,
+            filters=first_filter_size * 4,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_10 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_11 = DarknetConv(
-            filters=128,
+            filters=first_filter_size * 4,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_12 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_13 = DarknetConv(
-            filters=128,
+            filters=first_filter_size * 4,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -120,7 +121,7 @@ class PANet(layers.Layer):
         )
 
         self.conv_14 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -135,7 +136,7 @@ class PANet(layers.Layer):
         )
 
         self.conv_16 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=3,
             strides=2,
             activation=activation,
@@ -145,35 +146,35 @@ class PANet(layers.Layer):
         self.concat_6_16 = layers.Concatenate(axis=-1)
 
         self.conv_17 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_18 = DarknetConv(
-            filters=512,
+            filters=first_filter_size * 16,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_19 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_20 = DarknetConv(
-            filters=512,
+            filters=first_filter_size * 16,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_21 = DarknetConv(
-            filters=256,
+            filters=first_filter_size * 8,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -181,7 +182,7 @@ class PANet(layers.Layer):
         )
 
         self.conv_22 = DarknetConv(
-            filters=512,
+            filters=first_filter_size * 16,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -196,7 +197,7 @@ class PANet(layers.Layer):
         )
 
         self.conv_24 = DarknetConv(
-            filters=512,
+            filters=first_filter_size * 16,
             kernel_size=3,
             strides=2,
             activation=activation,
@@ -206,35 +207,35 @@ class PANet(layers.Layer):
         self.concat_input3_24 = layers.Concatenate(axis=-1)
 
         self.conv_25 = DarknetConv(
-            filters=512,
+            filters=first_filter_size * 16,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_26 = DarknetConv(
-            filters=1024,
+            filters=first_filter_size * 32,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_27 = DarknetConv(
-            filters=512,
+            filters=first_filter_size * 16,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_28 = DarknetConv(
-            filters=1024,
+            filters=first_filter_size * 32,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
             use_asymetrical_conv=use_asymetrical_conv
         )
         self.conv_29 = DarknetConv(
-            filters=512,
+            filters=first_filter_size * 16,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
@@ -242,7 +243,7 @@ class PANet(layers.Layer):
         )
 
         self.conv_30 = DarknetConv(
-            filters=1024,
+            filters=first_filter_size * 32,
             kernel_size=3,
             activation=activation,
             kernel_regularizer=kernel_regularizer,

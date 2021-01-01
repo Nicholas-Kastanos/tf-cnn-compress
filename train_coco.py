@@ -8,7 +8,7 @@ from src.yolov4.yolov4 import YOLOv4
 # import src.dataset as dataset
 import src.train as train
 # import src.predict as predict
-# import src.media as media
+import src.media as media
 import numpy as np
 import tensorflow_datasets as tfds
 from tensorflow.keras import backend, layers, optimizers, regularizers, callbacks
@@ -48,9 +48,9 @@ anchors = np.array([
 ]).astype(np.float32).reshape(3, 3, 2)
 strides = np.array([8, 16, 32])
 xyscales = np.array([1.2, 1.1, 1.05])
-input_size = (256, 256)  # (416, 416)
+input_size = (256, 256) #(416, 416)
 anchors_ratio = anchors / input_size[0]
-batch_size = 3
+batch_size = 10
 grid_size = (input_size[1], input_size[0]) // np.stack(
     (strides, strides), axis=1
 )
@@ -183,7 +183,13 @@ def resize_image(
         scale = input_size[1] / height
 
     # Resize
-    padded_image = tf.image.resize_with_pad(image, input_size[1], input_size[0])
+    if scale != 1:
+        width = int(round(width * scale))
+        height = int(round(height * scale))
+        padded_image = tf.image.resize_with_pad(
+            image, input_size[1], input_size[0])
+    else:
+        padded_image = np.copy(image)
 
     # Resize ground truth
     dw = input_size[0] - width
@@ -273,6 +279,9 @@ def coco_to_yolo(features):
         Tout=[tf.float32, tf.float32]
     )
 
+    # plt.imshow(media.draw_bboxes(image, modified_bboxes, class_dict))
+    # plt.show()
+
     ground_truth = tf.numpy_function(
         func=bboxes_to_ground_truth,
         inp=[modified_bboxes],
@@ -293,16 +302,15 @@ def filter_fn(image, ground_truth):
     return True
 
 
-for example in ds_train.skip(5).take(1):
-
-    mapped = coco_to_yolo(example)
-    image = mapped[0]
-    ground_truth = mapped[1]
-    # for gt in ground_truth:
-    # print(tf.shape(gt))
-    # print(image.shape)
-    # plt.imshow(image)
-    # plt.show()
+# for example in ds_train.skip(5).take(5):
+#     mapped = coco_to_yolo(example)
+#     # image = mapped[0]
+#     # ground_truth = mapped[1]
+#     # for gt in ground_truth:
+#     # print(tf.shape(gt))
+#     # print(image.shape)
+#     # plt.imshow(image)
+#     # plt.show()
 
 ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
     filter_fn).cache().shuffle(1000).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
@@ -310,7 +318,7 @@ ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AU
 ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
     filter_fn).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
 
-epochs = 10
+epochs = 400
 lr = 1e-4
 
 
@@ -331,7 +339,8 @@ yolo = YOLOv4(
     num_classes=num_classes,
     xyscales=xyscales,
     kernel_regularizer=regularizers.l2(0.0005),
-    use_asymetrical_conv=False
+    use_asymetrical_conv=True,
+    first_filter_size=16
 )
 yolo(inputs)
 
@@ -349,8 +358,18 @@ yolo.compile(
 )
 
 # print("Tensorboard Version: ", tensorboard.__version__)
-timestr = datetime.now().strftime("%Y%m%d-%H%M%S")
-logdir = "logs/coco/fit/" + timestr
+folder_name = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+from shutil import copyfile
+if not os.path.isdir('./models'):
+   os.mkdir('./models')
+if not os.path.isdir('./models/coco'):
+   os.mkdir('./models/coco')
+if not os.path.isdir('./models/coco/'+ folder_name):
+   os.mkdir('./models/coco/'+ folder_name)
+copyfile('./train_coco.py', './models/coco/' + folder_name + '/train_coco.py')
+
+logdir = "logs/coco/fit/" + folder_name
 tensorboard_callback = keras.callbacks.TensorBoard(
     log_dir=logdir, histogram_freq=10)
 
@@ -366,6 +385,8 @@ validation_freq = 5
 
 yolo.summary()
 
+tf.keras.utils.plot_model(yolo, show_shapes=True, show_layer_names=True, to_file='model.png')
+
 # verbose = 0
 # yolo.fit(
 #     ds_train,
@@ -378,4 +399,4 @@ yolo.summary()
 #     validation_freq=validation_freq
 # )
 
-# yolo.save('./models/coco/' + timestr)
+# yolo.save('./models/coco/' + folder_name + '/model')

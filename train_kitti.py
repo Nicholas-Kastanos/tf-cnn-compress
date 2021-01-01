@@ -8,7 +8,7 @@ from src.yolov4.yolov4 import YOLOv4
 # import src.dataset as dataset
 import src.train as train
 # import src.predict as predict
-# import src.media as media
+import src.media as media
 import numpy as np
 import tensorflow_datasets as tfds
 from tensorflow.keras import backend, layers, optimizers, regularizers, callbacks
@@ -55,7 +55,7 @@ grid_size = (input_size[1], input_size[0]) // np.stack(
     (strides, strides), axis=1
 )
 label_smoothing = 0.1
-included_classes = ds_info.features["objects"]["occluded"].names
+included_classes = ds_info.features["objects"]["type"].names
 num_classes = len(included_classes)
 class_dict = dict(
     zip(
@@ -183,7 +183,13 @@ def resize_image(
         scale = input_size[1] / height
 
     # Resize
-    padded_image = tf.image.resize_with_pad(image, input_size[1], input_size[0])
+    if scale != 1:
+        width = int(round(width * scale))
+        height = int(round(height * scale))
+        padded_image = tf.image.resize_with_pad(
+            image, input_size[1], input_size[0])
+    else:
+        padded_image = np.copy(image)
 
     # Resize ground truth
     dw = input_size[0] - width
@@ -206,11 +212,12 @@ def resize_image(
 def exclude_classes(modified_bboxes):
     return modified_bboxes[np.isin(modified_bboxes[:, -1], included_classes_idxs)]
 
-@tf.function
+# @tf.function
 def kitti_to_yolo(features):
     objects = features["objects"]
     bboxes: tf.Tensor = objects["bbox"]
-    labels: tf.Tensor = objects["occluded"]
+    labels: tf.Tensor = objects["type"]
+    print(bboxes)
 
     x_center = tf.math.reduce_mean(
         tf.concat(
@@ -256,13 +263,19 @@ def kitti_to_yolo(features):
     #     inp=[modified_bboxes],
     #     Tout=tf.float32
     # )
-
     image = features["image"]
+
+    plt.imshow(media.draw_bboxes(image, modified_bboxes, class_dict))
+    plt.show()
+
     image, modified_bboxes = tf.numpy_function(
         func=resize_image,
         inp=[image, modified_bboxes],
         Tout=[tf.float32, tf.float32]
     )
+
+    plt.imshow(media.draw_bboxes(image, modified_bboxes, class_dict))
+    plt.show()
 
     ground_truth = tf.numpy_function(
         func=bboxes_to_ground_truth,
@@ -283,9 +296,9 @@ def filter_fn(image, ground_truth):
         return False
     return True
 
-# for example in ds_train.skip(5).take(1):
+for example in ds_train.skip(5).take(5):
 
-#     mapped = kitti_to_yolo(example)
+    mapped = kitti_to_yolo(example)
 #     image = mapped[0]
 #     ground_truth = mapped[1]
 #     # for gt in ground_truth:
@@ -294,77 +307,77 @@ def filter_fn(image, ground_truth):
 #     # plt.imshow(image)
 #     # plt.show()
 
-ds_train = ds_train.map(kitti_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
-    filter_fn).cache().shuffle(1000).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+# ds_train = ds_train.map(kitti_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
+#     filter_fn).cache().shuffle(1000).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
-ds_val = ds_val.map(kitti_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
-    filter_fn).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
+# ds_val = ds_val.map(kitti_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
+#     filter_fn).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
 
-epochs = 10
-lr = 1e-4
-
-
-def lr_scheduler(epoch):
-    if epoch < int(epochs * 0.5):
-        return lr
-    if epoch < int(epochs * 0.8):
-        return lr * 0.5
-    if epoch < int(epochs * 0.9):
-        return lr * 0.1
-    return lr * 0.01
+# epochs = 10
+# lr = 1e-4
 
 
-backend.clear_session()
-inputs = layers.Input([input_size[0], input_size[1], 3])
-yolo = YOLOv4(
-    anchors=anchors,
-    num_classes=num_classes,
-    xyscales=xyscales,
-    kernel_regularizer=regularizers.l2(0.0005)
-)
-yolo(inputs)
+# def lr_scheduler(epoch):
+#     if epoch < int(epochs * 0.5):
+#         return lr
+#     if epoch < int(epochs * 0.8):
+#         return lr * 0.5
+#     if epoch < int(epochs * 0.9):
+#         return lr * 0.1
+#     return lr * 0.01
 
-optimizer = optimizers.Adam(learning_rate=lr)
-loss_iou_type = "ciou"
-loss_verbose = 0
 
-yolo.compile(
-    optimizer=optimizer,
-    loss=train.YOLOv4Loss(
-        batch_size=batch_size,
-        iou_type=loss_iou_type,
-        verbose=loss_verbose
-    )
-)
+# backend.clear_session()
+# inputs = layers.Input([input_size[0], input_size[1], 3])
+# yolo = YOLOv4(
+#     anchors=anchors,
+#     num_classes=num_classes,
+#     xyscales=xyscales,
+#     kernel_regularizer=regularizers.l2(0.0005)
+# )
+# yolo(inputs)
 
-# print("Tensorboard Version: ", tensorboard.__version__)
-timestr = datetime.now().strftime("%Y%m%d-%H%M%S")
-logdir = "logs/kitti/fit/" + timestr
-tensorboard_callback = keras.callbacks.TensorBoard(
-    log_dir=logdir, histogram_freq=10)
+# optimizer = optimizers.Adam(learning_rate=lr)
+# loss_iou_type = "ciou"
+# loss_verbose = 0
 
-callbacks = [
-    callbacks.LearningRateScheduler(lr_scheduler),
-    callbacks.TerminateOnNaN(),
-    tensorboard_callback
-]
+# yolo.compile(
+#     optimizer=optimizer,
+#     loss=train.YOLOv4Loss(
+#         batch_size=batch_size,
+#         iou_type=loss_iou_type,
+#         verbose=loss_verbose
+#     )
+# )
 
-steps_per_epoch = 100
-validation_steps = 50
-validation_freq = 5
+# # print("Tensorboard Version: ", tensorboard.__version__)
+# timestr = datetime.now().strftime("%Y%m%d-%H%M%S")
+# logdir = "logs/kitti/fit/" + timestr
+# tensorboard_callback = keras.callbacks.TensorBoard(
+#     log_dir=logdir, histogram_freq=10)
 
-yolo.summary()
+# callbacks = [
+#     callbacks.LearningRateScheduler(lr_scheduler),
+#     callbacks.TerminateOnNaN(),
+#     tensorboard_callback
+# ]
 
-# verbose = 0
-yolo.fit(
-    ds_train,
-    epochs=epochs,
-    # verbose=verbose,
-    callbacks=callbacks,
-    validation_data=ds_val,
-    steps_per_epoch=steps_per_epoch,
-    validation_steps=validation_steps,
-    validation_freq=validation_freq
-)
+# steps_per_epoch = 100
+# validation_steps = 50
+# validation_freq = 5
 
-yolo.save('./models/kitti/' + timestr
+# yolo.summary()
+
+# # verbose = 0
+# yolo.fit(
+#     ds_train,
+#     epochs=epochs,
+#     # verbose=verbose,
+#     callbacks=callbacks,
+#     validation_data=ds_val,
+#     steps_per_epoch=steps_per_epoch,
+#     validation_steps=validation_steps,
+#     validation_freq=validation_freq
+# )
+
+# yolo.save('./models/kitti/' + timestr)
