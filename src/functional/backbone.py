@@ -2,7 +2,7 @@
 # coding=utf-8
 
 import tensorflow as tf
-import functional.common as common
+import src.functional.common as common
 
 # def darknet53(input_data, use_asymetric_conv=False):
 
@@ -68,19 +68,9 @@ def cspdarknet53(input_data, use_asymetric_conv=False):
 
     input_data = common.csp_darknet_residual_block(
         input_data,
-        iterations=2,def darknet_residual(
-    x, 
-    filters_1: int, 
-    filters_2: int, 
-    activate_type="leaky",
-    use_asymetric_conv=False
-):
-    short_cut = x
-    x = darknet_conv(x=x, filters=filters_1, kernel_size=1, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
-    x = darknet_conv(x=x, filters=filters_2, kernel_size=3, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
-
-    x = short_cut + x
-    return x
+        iterations=2,
+        filters_1=64,
+        filters_2=128,
         activate_type="mish",
         use_asymetric_conv=use_asymetric_conv
     )

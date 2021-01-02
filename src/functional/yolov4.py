@@ -3,12 +3,12 @@
 
 import numpy as np
 import tensorflow as tf
-import functional.utils as utils
-import functional.common as common
-import functional.backbone as backbone
-import functional.neck as neck
-import functional.head as head
-from functional.config import cfg
+# import functional.utils as utils
+# import src.functional.common as common
+import src.functional.backbone as backbone
+import src.functional.neck as neck
+import src.functional.head as head
+# from functional.config import cfg
 
 # NUM_CLASS       = len(utils.read_class_names(cfg.YOLO.CLASSES))
 # STRIDES         = np.array(cfg.YOLO.STRIDES)
@@ -75,10 +75,10 @@ from functional.config import cfg
 
 #     return [conv_sbbox, conv_mbbox, conv_lbbox]
 
-def YOLOv4(input_layer, GRID_SIZE, NUM_CLASS, STRIDES, ANCHORS, XYSCALES):
-    input_layer = backbone.cspdarknet53(input_layer)
-    input_layer = neck.panet(input_layer, NUM_CLASS)
-    input_layer = head.yolov3_head(input_layer, GRID_SIZE, NUM_CLASS, STRIDES, ANCHORS, XYSCALES)
+def YOLOv4(input_layer, GRID_SIZE, NUM_CLASS, STRIDES, ANCHORS, XYSCALES, use_asymetric_conv, IMAGE_WIDTH):
+    input_layer = backbone.cspdarknet53(input_layer, use_asymetric_conv)
+    input_layer = neck.panet(input_layer, NUM_CLASS, use_asymetric_conv)
+    input_layer = head.yolov3_head(input_layer, GRID_SIZE, NUM_CLASS, STRIDES, ANCHORS, XYSCALES, IMAGE_WIDTH)
     return input_layer
     # route_1, route_2, conv = backbone.cspdarknet53(input_layer)
 

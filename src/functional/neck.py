@@ -1,9 +1,5 @@
-import numpy as np
-import tensorlfow as tf
-import functional.utils as utils
-import functional.common as common
-import functional.backbone as backbone
-from functional.config import cfg
+import tensorflow as tf
+import src.functional.common as common
 
 def panet(x, NUM_CLASS, use_asymetric_conv=False, activate_type="leaky"):
     route_1, route_2, conv = x

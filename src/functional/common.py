@@ -32,8 +32,7 @@ def darknet_conv(
     use_asymetric_conv=False
 ):
     if downsample:
-        x = tf.keras.layers.ZeroPadding2D(
-            ((1, 0), (1, 0)))(x)
+        x = tf.keras.layers.ZeroPadding2D(((1, 0), (1, 0)))(x)
         padding = 'valid'
         strides = 2
     else:
@@ -142,10 +141,11 @@ def csp_darknet_residual_block(# Combination of CPSResidualBlock and CSPDarknetR
     route = darknet_conv(route, filters=filters_2, kernel_size=1, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
     x = darknet_conv(x, filters=filters_2, kernel_size=1, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
     for _ in range(iterations):
-        x = darknet_residual(x,  filters_1=32, filters_2=64, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
+        x = darknet_residual(x,  filters_1=filters_1, filters_2=filters_2, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
     x = darknet_conv(x, filters=filters_2, kernel_size=1, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
     x = tf.concat([x, route], axis=-1)   
     x = darknet_conv(x, filters=filters_2, kernel_size=1, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
+    return x
 
 
 

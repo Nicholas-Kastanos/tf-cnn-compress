@@ -6,8 +6,8 @@ import cv2
 import random
 import numpy as np
 import tensorflow as tf
-import functional.utils as utils
-from functional.config import cfg
+import src.functional.utils as utils
+from src.functional.config import cfg
 
 
 class Dataset(object):

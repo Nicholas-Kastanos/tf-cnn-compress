@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 
-def yolov3_head(x, grid_size, NUM_CLASS, STRIDES, ANCHORS, XYSCALES):
+def yolov3_head(x, grid_size, NUM_CLASS, STRIDES, ANCHORS, XYSCALES, IMAGE_WIDTH):
     raw_s, raw_m, raw_l = x
     pred_s = decode(raw_s, grid_size[0], NUM_CLASS, STRIDES, ANCHORS, 0, XYSCALES)
     pred_m = decode(raw_m, grid_size[1], NUM_CLASS, STRIDES, ANCHORS, 1, XYSCALES)
@@ -10,27 +10,29 @@ def yolov3_head(x, grid_size, NUM_CLASS, STRIDES, ANCHORS, XYSCALES):
     return pred_s, pred_m, pred_l
 
 
-def decode(x, output_size, NUM_CLASS, STRIDES, ANCHORS, i=0, XYSCALES=[1, 1, 1]):
+def decode(x, grid_size, NUM_CLASS, STRIDES, ANCHORS, i=0, XYSCALES=[1, 1, 1], IMAGE_WIDTH=416):
+    batch_size=tf.shape(x)[0]
     x = tf.reshape(
-        x, (tf.shape(x)[0], output_size, output_size, 3, 5 + NUM_CLASS))
+        x, (batch_size, grid_size[0], grid_size[1], 3, 5 + NUM_CLASS))
 
-    conv_raw_dxdy, conv_raw_dwdh, conv_raw_conf, conv_raw_prob = tf.split(x, (2, 2, 1, NUM_CLASS),
+    raw_dxdy, raw_dwdh, raw_conf, raw_prob = tf.split(x, (2, 2, 1, NUM_CLASS),
                                                                           axis=-1)
 
-    xy_grid = tf.meshgrid(tf.range(output_size), tf.range(output_size))
-    xy_grid = tf.expand_dims(tf.stack(xy_grid, axis=-1),
-                             axis=2)  # [gx, gy, 1, 2]
-    xy_grid = tf.tile(tf.expand_dims(xy_grid, axis=0),
-                      [tf.shape(x)[0], 1, 1, 3, 1])
-
+    xy_grid = tf.meshgrid(tf.range(grid_size[0]), tf.range(grid_size[1]))
+    xy_grid = tf.stack(xy_grid, axis=-1)
+    xy_grid = xy_grid[tf.newaxis, :, :, tf.newaxis, :]
+    xy_grid = tf.tile(xy_grid, [1, 1, 1, 3, 1])
     xy_grid = tf.cast(xy_grid, tf.float32)
 
-    pred_xy = ((tf.sigmoid(conv_raw_dxdy) *
-                XYSCALES[i]) - 0.5 * (XYSCALES[i] - 1) + xy_grid) * STRIDES[i]
-    pred_wh = (tf.exp(conv_raw_dwdh) * ANCHORS[i])
-    pred_xywh = tf.concat([pred_xy, pred_wh], axis=-1)
+    a_half = tf.constant(0.5, dtype=tf.float32, shape=(grid_size[0], grid_size[1], 3, 2))
 
-    pred_conf = tf.sigmoid(conv_raw_conf)
-    pred_prob = tf.sigmoid(conv_raw_prob)
+    txty = tf.sigmoid(raw_dxdy)
+    txty = (txty - a_half) * XYSCALES[i] + a_half
+    bxby = (txty + xy_grid) / grid_size
 
-    return tf.concat([pred_xywh, pred_conf, pred_prob], axis=-1)
+    conf = tf.sigmoid(raw_conf)
+    prob = tf.sigmoid(raw_prob)
+
+    bwbh = (ANCHORS[i] / IMAGE_WIDTH) * tf.exp(raw_dwdh)
+
+    return tf.concat([bxby, bwbh, conf, prob], axis=-1)

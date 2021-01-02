@@ -4,7 +4,7 @@
 from datetime import datetime
 import tensorboard
 import matplotlib.pyplot as plt
-from src.yolov4.yolov4 import YOLOv4
+from src.functional.yolov4 import YOLOv4
 # import src.dataset as dataset
 import src.train as train
 # import src.predict as predict
@@ -50,7 +50,7 @@ strides = np.array([8, 16, 32])
 xyscales = np.array([1.2, 1.1, 1.05])
 input_size = (256, 256) #(416, 416)
 anchors_ratio = anchors / input_size[0]
-batch_size = 10
+batch_size = 1
 grid_size = (input_size[1], input_size[0]) // np.stack(
     (strides, strides), axis=1
 )
@@ -333,16 +333,10 @@ def lr_scheduler(epoch):
 
 
 backend.clear_session()
-inputs = layers.Input([input_size[0], input_size[1], 3])
-yolo = YOLOv4(
-    anchors=anchors,
-    num_classes=num_classes,
-    xyscales=xyscales,
-    kernel_regularizer=regularizers.l2(0.0005),
-    use_asymetric_conv=True,
-    first_filter_size=16
-)
-yolo(inputs)
+input_layer = layers.Input([input_size[0], input_size[1], 3])
+output_layer = YOLOv4(input_layer, grid_size, num_classes, strides, anchors, xyscales, False, input_size[0])
+
+yolo = tf.keras.Model(input_layer, output_layer)
 
 optimizer = optimizers.Adam(learning_rate=lr)
 loss_iou_type = "ciou"
@@ -383,20 +377,20 @@ steps_per_epoch = 100
 validation_steps = 50
 validation_freq = 5
 
-yolo.summary()
+# yolo.summary()
 
-tf.keras.utils.plot_model(yolo, show_shapes=True, show_layer_names=True, to_file='model.png')
+# tf.keras.utils.plot_model(yolo, show_shapes=True, show_layer_names=True, to_file='model.png')
 
 # verbose = 0
-# yolo.fit(
-#     ds_train,
-#     epochs=epochs,
-#     # verbose=verbose,
-#     callbacks=callbacks,
-#     validation_data=ds_val,
-#     steps_per_epoch=steps_per_epoch,
-#     validation_steps=validation_steps,
-#     validation_freq=validation_freq
-# )
+yolo.fit(
+    ds_train,
+    epochs=epochs,
+    # verbose=verbose,
+    callbacks=callbacks,
+    validation_data=ds_val,
+    steps_per_epoch=steps_per_epoch,
+    validation_steps=validation_steps,
+    validation_freq=validation_freq
+)
 
-# yolo.save('./models/coco/' + folder_name + '/model')
+yolo.save('./models/coco/' + folder_name + '/model')
