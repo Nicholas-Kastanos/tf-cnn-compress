@@ -339,7 +339,7 @@ yolo = YOLOv4(
     num_classes=num_classes,
     xyscales=xyscales,
     kernel_regularizer=regularizers.l2(0.0005),
-    use_asymetrical_conv=True,
+    use_asymetric_conv=True,
     first_filter_size=16
 )
 yolo(inputs)

@@ -9,7 +9,7 @@ class CSPDarknet53(layers.Layer):
         activation0: str = "mish",
         activation1: str = "leaky",
         kernel_regularizer=None,
-        use_asymetrical_conv=False,
+        use_asymetric_conv=False,
         first_filter_size=32
     ):
         super(CSPDarknet53, self).__init__()
@@ -19,7 +19,7 @@ class CSPDarknet53(layers.Layer):
             activation=activation0,
             kernel_regularizer=kernel_regularizer,
             strides=1,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
         self.res0 = CSPDarknetResidualBlock(
             iterations=1,
@@ -27,7 +27,7 @@ class CSPDarknet53(layers.Layer):
             filters_2=first_filter_size * 2,
             activation=activation0,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
         self.res1 = CSPDarknetResidualBlock(
             iterations=2,
@@ -35,7 +35,7 @@ class CSPDarknet53(layers.Layer):
             filters_2=first_filter_size * 4,
             activation=activation0,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
         self.res2 = CSPDarknetResidualBlock(
             iterations=8,
@@ -43,7 +43,7 @@ class CSPDarknet53(layers.Layer):
             filters_2=first_filter_size * 8,
             activation=activation0,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
         self.res3 = CSPDarknetResidualBlock(
             iterations=8,
@@ -51,7 +51,7 @@ class CSPDarknet53(layers.Layer):
             filters_2=first_filter_size * 16,
             activation=activation0,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
         self.res4 = CSPDarknetResidualBlock(
             iterations=4,
@@ -59,7 +59,7 @@ class CSPDarknet53(layers.Layer):
             filters_2=first_filter_size * 32,
             activation=activation0,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
 
         self.SPP_pre_conv0 = DarknetConv(
@@ -67,19 +67,19 @@ class CSPDarknet53(layers.Layer):
             kernel_size=1, 
             activation=activation1, 
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv)
+            use_asymetric_conv=use_asymetric_conv)
         self.SPP_pre_conv1 = DarknetConv(
             filters=first_filter_size * 32, 
             kernel_size=3, 
             activation=activation1, 
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv)
+            use_asymetric_conv=use_asymetric_conv)
         self.SPP_pre_conv2 = DarknetConv(
             filters=first_filter_size * 16, 
             kernel_size=1, 
             activation=activation1, 
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv)
+            use_asymetric_conv=use_asymetric_conv)
 
         self.spp = SPP()
 
@@ -88,19 +88,19 @@ class CSPDarknet53(layers.Layer):
             kernel_size=1, 
             activation=activation1, 
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv)
+            use_asymetric_conv=use_asymetric_conv)
         self.SPP_post_conv1 = DarknetConv(
             filters=first_filter_size * 32, 
             kernel_size=3, 
             activation=activation1, 
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv)
+            use_asymetric_conv=use_asymetric_conv)
         self.SPP_post_conv2 = DarknetConv(
             filters=first_filter_size * 16, 
             kernel_size=1, 
             activation=activation1, 
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv)
+            use_asymetric_conv=use_asymetric_conv)
 
     def call(self, x):
         x = self.conv0(x)

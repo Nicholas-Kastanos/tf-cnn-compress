@@ -1,9 +1,14 @@
 import tensorflow as tf
-from tensorflow.keras import Sequential, layers, regularizers
+from tensorflow.keras import Sequential, layers, regularizers, backend
 
-from typing import Union
-
-from ..common import Mish
+class Mish(layers.Layer):
+    '''
+    Mish Activation Function.
+    .. math::
+        mish(x) = x * tanh(softplus(x)) = x * tanh(ln(1 + e^{x}))
+    '''
+    def call(self, x):
+        return x * backend.tanh(backend.softplus(x))
 
 
 class DarknetConv(layers.Layer):
@@ -11,55 +16,67 @@ class DarknetConv(layers.Layer):
         self,
         filters: int,
         kernel_size: int,
-        activation: str = "mish",
-        kernel_regularizer=regularizers.l2(0.0005),
-        strides: int = 1,
-        use_asymetrical_conv=False,
+        downsample: bool=False,
+        activate: bool=True, 
+        bn: bool=True,
+        activate_type: str = "mish",
+        use_asymetric_conv: bool=False,
         **kwargs
     ):
         super(DarknetConv, self).__init__(**kwargs)
-        self.filters = filters
-        self.kernel_size = (kernel_size, kernel_size)
-        self.activation = activation
-        self.strides = (strides, strides)
         self.sequential = Sequential()
 
-        if self.strides[0] == 2:
+        if downsample:
             self.sequential.add(layers.ZeroPadding2D(((1, 0), (1, 0))))
+            padding = 'valid'
+            strides = 2
+        else:
+            padding = 'same'
+            strides = 1
 
-        if use_asymetrical_conv and self.kernel_size == (3, 3) and self.strides == (1, 1):
+        if use_asymetric_conv and kernel_size==3 and not downsample:
             self.sequential.add(layers.Conv2D(
-                filters=self.filters,
-                kernel_size=(self.kernel_size[0], 1),
-                strides=self.strides,
-                padding="same",
-                kernel_regularizer=kernel_regularizer
+                filters=filters,
+                kernel_size=(kernel_size, 1),
+                strides=strides,
+                padding=padding,
+                use_bias=not bn,
+                kernel_regularizer=tf.keras.regularizers.l2(0.0005),
+                kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+                bias_initializer=tf.constant_initializer(0.)
             ))
             self.sequential.add(layers.Conv2D(
-                filters=self.filters,
-                kernel_size=(1, self.kernel_size[1]),
-                strides=self.strides,
-                padding="same",
-                kernel_regularizer=kernel_regularizer
+                filters=filters,
+                kernel_size=(1, kernel_size),
+                strides=strides,
+                padding=padding,
+                use_bias=not bn,
+                kernel_regularizer=tf.keras.regularizers.l2(0.0005),
+                kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+                bias_initializer=tf.constant_initializer(0.)
             ))
         else:
             self.sequential.add(layers.Conv2D(
-                filters=self.filters,
-                kernel_size=self.kernel_size,
-                strides=self.strides,
-                padding="same" if self.strides[0] == 1 else "valid",
-                kernel_regularizer=kernel_regularizer
+                filters=filters,
+                kernel_size=kernel_size,
+                strides=strides,
+                padding=padding,
+                use_bias=not bn,
+                kernel_regularizer=tf.keras.regularizers.l2(0.0005),
+                kernel_initializer=tf.random_normal_initializer(stddev=0.01),
+                bias_initializer=tf.constant_initializer(0.)
             ))
 
-        if self.activation is not None:
+        if bn:
             self.sequential.add(layers.BatchNormalization())
 
-        if self.activation == "mish":
-            self.sequential.add(Mish())
-        elif self.activation == "leaky":
-            self.sequential.add(layers.LeakyReLU(alpha=0.1))
-        elif self.activation == "relu":
-            self.sequential.add(layers.ReLU())
+        if activate:
+            if activate_type == "mish":
+                self.sequential.add(Mish())
+            elif activate_type == "leaky":
+                self.sequential.add(layers.LeakyReLU(alpha=0.1))
+            elif activate_type == "relu":
+                self.sequential.add(layers.ReLU())
 
     def build(self, input_shape):
         self.input_dim = input_shape[-1]
@@ -67,39 +84,25 @@ class DarknetConv(layers.Layer):
     def call(self, x):
         return self.sequential(x)
 
-
 class DarknetResidual(layers.Layer):
     def __init__(
         self,
         filters_1: int,
         filters_2: int,
-        activation: str = "mish",
-        kernel_regularizer=None,
-        use_asymetrical_conv=False,
+        activate_type: str = "mish",
+        use_asymetric_conv=False,
         **kwargs
     ):
         super(DarknetResidual, self).__init__(**kwargs)
-        self.conv_1 = DarknetConv(
-            filters=filters_1,
-            kernel_size=1,
-            activation=activation,
-            kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
-        )
-        self.conv_2 = DarknetConv(
-            filters=filters_2,
-            kernel_size=3,
-            activation=activation,
-            kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
-        )
+        self.conv_1 = DarknetConv(filters=filters_1, kernel_size=1, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
+        self.conv_2 = DarknetConv(filters=filters_2, kernel_size=3, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
         self.add = layers.Add()
 
     def call(self, x):
-        prev = x
+        short_cut = x
         x = self.conv_1(x)
         x = self.conv_2(x)
-        x = self.add([prev, x])
+        x = self.add([short_cut, x])
         return x
 
 
@@ -110,8 +113,7 @@ class ResidualBlock(layers.Layer):
         filters_1: int,
         filters_2: int,
         activation: str = "mish",
-        kernel_regularizer=None,
-        use_asymetrical_conv=False,
+        use_asymetric_conv=False,
         **kwargs
     ):
         super(ResidualBlock, self).__init__(**kwargs)
@@ -122,8 +124,7 @@ class ResidualBlock(layers.Layer):
                     filters_1=filters_1,
                     filters_2=filters_2,
                     activation=activation,
-                    kernel_regularizer=kernel_regularizer,
-                    use_asymetrical_conv=use_asymetrical_conv
+                    use_asymetric_conv=use_asymetric_conv
                 )
             )
 
@@ -138,8 +139,7 @@ class DarknetResidualBlock(layers.Layer):
         filters_1: int,
         filters_2: int,
         activation: str = "mish",
-        kernel_regularizer=None,
-        use_asymetrical_conv=False,
+        use_asymetric_conv=False,
         **kwargs
     ):
         super(DarknetResidualBlock, self).__init__(**kwargs)
@@ -151,9 +151,8 @@ class DarknetResidualBlock(layers.Layer):
                 filters=filters_2,
                 kernel_size=3,
                 activation=activation,
-                kernel_regularizer=kernel_regularizer,
                 strides=2,
-                use_asymetrical_conv=use_asymetrical_conv
+                use_asymetric_conv=use_asymetric_conv
             )
         )
 
@@ -163,8 +162,7 @@ class DarknetResidualBlock(layers.Layer):
                 filters_1=filters_1,
                 filters_2=filters_2,
                 activation=activation,
-                kernel_regularizer=kernel_regularizer,
-                use_asymetrical_conv=use_asymetrical_conv
+                use_asymetric_conv=use_asymetric_conv
             )
         )
 
@@ -180,7 +178,7 @@ class CSPResidualBlock(layers.Layer):
         filters_2: int,
         activation: str = "mish",
         kernel_regularizer=None,
-        use_asymetrical_conv=False,
+        use_asymetric_conv=False,
         **kwargs
     ):
         super(CSPResidualBlock, self).__init__(**kwargs)
@@ -189,14 +187,14 @@ class CSPResidualBlock(layers.Layer):
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
         self.part2_conv1 = DarknetConv(
             filters=filters_2,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
         self.part2_res = ResidualBlock(
             iterations=iterations,
@@ -204,14 +202,14 @@ class CSPResidualBlock(layers.Layer):
             filters_2=filters_2,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
         self.part2_conv2 = DarknetConv(
             filters=filters_2,
             kernel_size=1,
             activation=activation,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv
+            use_asymetric_conv=use_asymetric_conv
         )
         self.concat1_2 = layers.Concatenate(axis=-1)
     
@@ -233,7 +231,7 @@ class CSPDarknetResidualBlock(layers.Layer):
         filters_2: int,
         activation: str = "mish",
         kernel_regularizer=None,
-        use_asymetrical_conv=False,
+        use_asymetric_conv=False,
         **kwargs
     ):
         super(CSPDarknetResidualBlock, self).__init__(**kwargs)
@@ -247,7 +245,7 @@ class CSPDarknetResidualBlock(layers.Layer):
                 activation=activation,
                 kernel_regularizer=kernel_regularizer,
                 strides=2,
-                use_asymetrical_conv=use_asymetrical_conv
+                use_asymetric_conv=use_asymetric_conv
             )
         )
 
@@ -258,7 +256,7 @@ class CSPDarknetResidualBlock(layers.Layer):
                 filters_2=filters_2,
                 activation=activation,
                 kernel_regularizer=kernel_regularizer,
-                use_asymetrical_conv=use_asymetrical_conv
+                use_asymetric_conv=use_asymetric_conv
             )
         )
 
@@ -268,7 +266,7 @@ class CSPDarknetResidualBlock(layers.Layer):
                 kernel_size=1,
                 activation=activation,
                 kernel_regularizer=kernel_regularizer,
-                use_asymetrical_conv=use_asymetrical_conv
+                use_asymetric_conv=use_asymetric_conv
             )
         )
     

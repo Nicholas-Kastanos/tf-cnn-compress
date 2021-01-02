@@ -3,7 +3,7 @@ import tensorflow as tf
 from tensorflow.keras import activations, backend, layers
 
 class YOLOv3Head(layers.Layer):
-    def __init__(self, anchors, num_classes, xysclaes):
+    def __init__(self, anchors, num_classes, xyscales):
         super(YOLOv3Head, self).__init__(name="YOLOv3Head")
         self.a_half = None
         self.anchors = anchors
@@ -11,7 +11,7 @@ class YOLOv3Head(layers.Layer):
         self.grid_size = None
         self.image_width = None
         self.num_classes = num_classes
-        self.scales = xysclaes
+        self.scales = xyscales
 
         self.reshape0 = layers.Reshape((-1,))
         self.reshape1 = layers.Reshape((-1,))

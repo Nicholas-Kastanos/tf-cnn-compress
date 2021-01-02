@@ -20,7 +20,7 @@ class YOLOv4(Model):
         activation0: str = "mish",
         activation1: str = "leaky",
         kernel_regularizer=None,
-        use_asymetrical_conv=False,
+        use_asymetric_conv=False,
         first_filter_size=32
     ):
         super(YOLOv4, self).__init__(name="YOLOv4")
@@ -28,14 +28,14 @@ class YOLOv4(Model):
             activation0=activation0,
             activation1=activation1,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv,
+            use_asymetric_conv=use_asymetric_conv,
             first_filter_size=first_filter_size
         )
         self.panet = PANet(
             num_classes=num_classes,
             activation=activation1,
             kernel_regularizer=kernel_regularizer,
-            use_asymetrical_conv=use_asymetrical_conv,
+            use_asymetric_conv=use_asymetric_conv,
             first_filter_size=first_filter_size
         )
         self.yolov3_head = YOLOv3Head(
