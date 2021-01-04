@@ -18,7 +18,35 @@ class BatchNormalization(tf.keras.layers.BatchNormalization):
 
 def mish(x):
     return x * tf.math.tanh(tf.math.softplus(x))
-    # return tf.keras.layers.Lambda(lambda x: x*tf.tanh(tf.math.log(1+tf.exp(x))))(x)
+
+class Mish(tf.keras.layers.Layer):
+    '''
+    Mish Activation Function.
+    .. math::
+        mish(x) = x * tanh(softplus(x)) = x * tanh(ln(1 + e^{x}))
+    Shape:
+        - Input: Arbitrary. Use the keyword argument `input_shape`
+        (tuple of integers, does not include the samples axis)
+        when using this layer as the first layer in a model.
+        - Output: Same shape as the input.
+    Examples:
+        >>> X_input = Input(input_shape)
+        >>> X = Mish()(X_input)
+    '''
+
+    def __init__(self, **kwargs):
+        super(Mish, self).__init__(**kwargs)
+        self.supports_masking = True
+
+    def call(self, inputs):
+        return inputs * tf.keras.backend.tanh(tf.keras.backend.softplus(inputs))
+
+    def get_config(self):
+        base_config = super(Mish, self).get_config()
+        return base_config
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
 
 
 def darknet_conv(
@@ -47,8 +75,8 @@ def darknet_conv(
             padding=padding, 
             use_bias=not bn, 
             kernel_regularizer=tf.keras.regularizers.l2(0.0005), 
-            kernel_initializer=tf.random_normal_initializer(stddev=0.01), 
-            bias_initializer=tf.constant_initializer(0.)
+            kernel_initializer=tf.keras.initializers.RandomNormal(stddev=0.01), 
+            bias_initializer=tf.keras.initializers.Constant(0.)
         )(x)
         conv = tf.keras.layers.Conv2D(
             filters=filters, 
@@ -57,8 +85,8 @@ def darknet_conv(
             padding=padding, 
             use_bias=not bn, 
             kernel_regularizer=tf.keras.regularizers.l2(0.0005), 
-            kernel_initializer=tf.random_normal_initializer(stddev=0.01), 
-            bias_initializer=tf.constant_initializer(0.)
+            kernel_initializer=tf.keras.initializers.RandomNormal(stddev=0.01), 
+            bias_initializer=tf.keras.initializers.Constant(0.)
         )(conv)
     else:
         conv = tf.keras.layers.Conv2D(
@@ -68,17 +96,17 @@ def darknet_conv(
             padding=padding, 
             use_bias=not bn, 
             kernel_regularizer=tf.keras.regularizers.l2(0.0005), 
-            kernel_initializer=tf.random_normal_initializer(stddev=0.01), 
-            bias_initializer=tf.constant_initializer(0.)
+            kernel_initializer=tf.keras.initializers.RandomNormal(stddev=0.01), 
+            bias_initializer=tf.keras.initializers.Constant(0.)
         )(x)
 
     if bn:
         conv = BatchNormalization()(conv)
     if activate == True:
         if activate_type == "leaky":
-            conv = tf.nn.leaky_relu(conv, alpha=0.1)
+            conv = tf.keras.layers.LeakyReLU(alpha=0.1)(conv)
         elif activate_type == "mish":
-            conv = mish(conv)
+            conv = Mish()(conv)
     return conv
 
 
@@ -92,8 +120,8 @@ def darknet_residual(
     short_cut = x
     x = darknet_conv(x=x, filters=filters_1, kernel_size=1, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
     x = darknet_conv(x=x, filters=filters_2, kernel_size=3, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
-
-    x = short_cut + x
+    x = tf.keras.layers.Add()([short_cut, x])
+    # x = short_cut + x
     return x
 
 # def residual_block(
@@ -143,7 +171,8 @@ def csp_darknet_residual_block(# Combination of CPSResidualBlock and CSPDarknetR
     for _ in range(iterations):
         x = darknet_residual(x,  filters_1=filters_1, filters_2=filters_2, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
     x = darknet_conv(x, filters=filters_2, kernel_size=1, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
-    x = tf.concat([x, route], axis=-1)   
+    x = tf.keras.layers.Concatenate(axis=-1)([x, route])
+    # x = tf.concat([x, route], axis=-1)   
     x = darknet_conv(x, filters=filters_2, kernel_size=1, activate_type=activate_type, use_asymetric_conv=use_asymetric_conv)
     return x
 
@@ -155,4 +184,5 @@ def route_group(input_layer, groups, group_id):
 
 
 def upsample(input_layer):
-    return tf.image.resize(input_layer, (input_layer.shape[1] * 2, input_layer.shape[2] * 2), method='bilinear')
+    return tf.keras.layers.UpSampling2D(interpolation='bilinear')(input_layer)
+    # return tf.image.resize(input_layer, (input_layer.shape[1] * 2, input_layer.shape[2] * 2), method='bilinear')

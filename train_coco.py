@@ -1,27 +1,35 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import os
 from datetime import datetime
-import tensorboard
+import argparse
+
 import matplotlib.pyplot as plt
-from src.functional.yolov4 import YOLOv4
-# import src.dataset as dataset
-import src.train as train
+import numpy as np
+import tensorboard
+import tensorflow as tf
+import tensorflow_datasets as tfds
+
 # import src.predict as predict
 import src.media as media
-import numpy as np
-import tensorflow_datasets as tfds
-from tensorflow.keras import backend, layers, optimizers, regularizers, callbacks
-from tensorflow import keras
-import tensorflow as tf
-import os
+# import src.dataset as dataset
+import src.train as train
+from src.functional.config import cfg
+from src.functional.yolov4 import YOLOv4
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-n', '--folder_name', default=datetime.now().strftime("%Y%m%d-%H%M%S"))
+parser.add_argument('-q', '--quantized_training', action='store_true', default=False)
+parser.add_argument('-a', '--asymetric', action='store_true', default=False)
+args = parser.parse_args()
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-gpus = tf.config.experimental.list_physical_devices('GPU')
+# gpus = tf.config.experimental.list_physical_devices('GPU')
 # print(gpus)
 
 try:
-    import google.colab
+    import google.colab  # pylint: disable=no-name-in-module,import-error
     IN_COLAB = True
 except:
     IN_COLAB = False
@@ -38,23 +46,35 @@ else:
     split=['train', 'test'],
     shuffle_files=True,
     with_info=True,
-    data_dir=data_dir
+    data_dir=data_dir,
+    try_gcs=IN_COLAB
 )
 
-anchors = np.array([
-    [[12, 16], [19, 36], [40, 28]],
-    [[36, 75], [76, 55], [72, 146]],
-    [[142, 110], [192, 243], [459, 401]],
-]).astype(np.float32).reshape(3, 3, 2)
-strides = np.array([8, 16, 32])
-xyscales = np.array([1.2, 1.1, 1.05])
-input_size = (256, 256) #(416, 416)
-anchors_ratio = anchors / input_size[0]
+epochs = 400
 batch_size = 1
+input_size = (416, 416)
+# input_size = (256, 256) 
+quantized_training = False
+use_asymetric_conv = False
+
+lr = cfg.TRAIN.LR
+def lr_scheduler(epoch):
+    if epoch < int(epochs * 0.5):
+        return lr
+    if epoch < int(epochs * 0.8):
+        return lr * 0.5
+    if epoch < int(epochs * 0.9):
+        return lr * 0.1
+    return lr * 0.01
+
+anchors = np.asarray(cfg.YOLO.ANCHORS).astype(np.float32).reshape(3, 3, 2)
+strides = np.asarray(cfg.YOLO.STRIDES)
+xyscales = np.asarray(cfg.YOLO.XYSCALE)
+label_smoothing = cfg.YOLO.LABEL_SMOOTHING
+anchors_ratio = anchors / input_size[0]
 grid_size = (input_size[1], input_size[0]) // np.stack(
     (strides, strides), axis=1
 )
-label_smoothing = 0.1
 included_classes = ds_info.features["objects"]["label"].names[:20]
 num_classes = len(included_classes)
 class_dict = dict(
@@ -82,7 +102,7 @@ grid_xy = [
     for _size in grid_size  # (height, width)
 ]
 
-chance_to_remove_person_only_images = 0.5
+chance_to_remove_person_only_images = 0.5 # Attempt to balance the dataset
 
 
 def bboxes_to_ground_truth(bboxes):
@@ -170,10 +190,7 @@ def bboxes_to_ground_truth(bboxes):
     return ground_truth
 
 
-def resize_image(
-    image,
-    ground_truth
-):
+def resize_image(image, ground_truth):
     image = tf.cast(image, tf.float32) / 255.0
     height, width, _ = image.shape
 
@@ -318,30 +335,30 @@ ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AU
 ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
     filter_fn).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
 
-epochs = 400
-lr = 1e-4
 
-
-def lr_scheduler(epoch):
-    if epoch < int(epochs * 0.5):
-        return lr
-    if epoch < int(epochs * 0.8):
-        return lr * 0.5
-    if epoch < int(epochs * 0.9):
-        return lr * 0.1
-    return lr * 0.01
-
-
-backend.clear_session()
-input_layer = layers.Input([input_size[0], input_size[1], 3])
-output_layer = YOLOv4(input_layer, grid_size, num_classes, strides, anchors, xyscales, False, input_size[0])
-
+tf.keras.backend.clear_session()
+input_layer = tf.keras.layers.Input([input_size[0], input_size[1], 3])
+output_layer = YOLOv4(input_layer, grid_size, num_classes, strides, anchors, xyscales, args.asymetric, input_size[0])
 yolo = tf.keras.Model(input_layer, output_layer)
 
-optimizer = optimizers.Adam(learning_rate=lr)
+
+if args.quantized_training:
+    import tensorflow_model_optimization as tfmot
+
+    def apply_quantization(layer):
+        if isinstance(layer, tf.keras.layers.Conv2D):
+            return tfmot.quantization.keras.quantize_annotate_layer(layer)
+        return layer
+
+    yolo = tf.keras.models.clone_model(yolo, clone_function=apply_quantization)
+
+    with tfmot.quantization.keras.quantize_scope({}):
+        # Use `quantize_apply` to actually make the model quantization aware.
+        yolo = tfmot.quantization.keras.quantize_apply(yolo)
+
+optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
 loss_iou_type = "ciou"
 loss_verbose = 0
-
 yolo.compile(
     optimizer=optimizer,
     loss=train.YOLOv4Loss(
@@ -352,24 +369,23 @@ yolo.compile(
 )
 
 # print("Tensorboard Version: ", tensorboard.__version__)
-folder_name = datetime.now().strftime("%Y%m%d-%H%M%S")
+
 
 from shutil import copyfile
+
 if not os.path.isdir('./models'):
    os.mkdir('./models')
-if not os.path.isdir('./models/coco'):
-   os.mkdir('./models/coco')
-if not os.path.isdir('./models/coco/'+ folder_name):
-   os.mkdir('./models/coco/'+ folder_name)
-copyfile('./train_coco.py', './models/coco/' + folder_name + '/train_coco.py')
+if not os.path.isdir('./models/'+ args.folder_name):
+   os.mkdir('./models/'+ args.folder_name)
+copyfile('./train_coco.py', './models/' + args.folder_name + '/train_coco.py')
 
-logdir = "logs/coco/fit/" + folder_name
-tensorboard_callback = keras.callbacks.TensorBoard(
+logdir = "logs/fit/" + args.folder_name
+tensorboard_callback = tf.keras.callbacks.TensorBoard(
     log_dir=logdir, histogram_freq=10)
 
 callbacks = [
-    callbacks.LearningRateScheduler(lr_scheduler),
-    callbacks.TerminateOnNaN(),
+    tf.keras.callbacks.LearningRateScheduler(lr_scheduler),
+    tf.keras.callbacks.TerminateOnNaN(),
     tensorboard_callback
 ]
 
@@ -393,4 +409,4 @@ yolo.fit(
     validation_freq=validation_freq
 )
 
-yolo.save('./models/coco/' + folder_name + '/model')
+yolo.save('./models/' + args.folder_name + '/model')
