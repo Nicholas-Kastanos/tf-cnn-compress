@@ -29,6 +29,7 @@ class YOLOv4Loss(Loss):
     def __init__(self, batch_size, iou_type, verbose=0):
         super(YOLOv4Loss, self).__init__(name="YOLOv4Loss")
         self.batch_size = batch_size
+        self.iou_type = iou_type
         if iou_type == "iou":
             self.bbox_xiou = bbox_iou
         elif iou_type == "giou":
@@ -43,6 +44,13 @@ class YOLOv4Loss(Loss):
         self.prob_binaryCrossentropy = BinaryCrossentropy(
             reduction=Reduction.NONE
         )
+
+    def get_config(self):
+        return {
+            'batch_size': self.batch_size,
+            'iou_type': self.iou_type,
+            'verbose': self.verbose
+        }
 
     def call(self, y_true, y_pred):
         """

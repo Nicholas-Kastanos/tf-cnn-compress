@@ -4,6 +4,7 @@
 import os
 from datetime import datetime
 import argparse
+from shutil import copyfile
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,7 +25,7 @@ parser.add_argument('-q', '--quantized_training', action='store_true', default=F
 parser.add_argument('-a', '--asymetric', action='store_true', default=False)
 args = parser.parse_args()
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 # gpus = tf.config.experimental.list_physical_devices('GPU')
 # print(gpus)
 
@@ -50,12 +51,28 @@ else:
     try_gcs=IN_COLAB
 )
 
-epochs = 400
+epochs = 3
 batch_size = 1
 input_size = (416, 416)
 # input_size = (256, 256) 
 quantized_training = False
 use_asymetric_conv = False
+
+
+
+model_dir = 'models/' + args.folder_name
+if not os.path.isdir(model_dir):
+   os.makedirs(model_dir)
+
+log_dir = "logs/fit/" + args.folder_name
+if not os.path.isdir(log_dir):
+   os.makedirs(log_dir)
+
+checkpoint_dir = model_dir + '/checkpoints/'
+if not os.path.exists(checkpoint_dir):
+    os.makedirs(checkpoint_dir)
+
+copyfile('./train_coco.py', model_dir + '/train_coco.py')
 
 lr = cfg.TRAIN.LR
 def lr_scheduler(epoch):
@@ -337,56 +354,64 @@ ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTU
 
 
 tf.keras.backend.clear_session()
-input_layer = tf.keras.layers.Input([input_size[0], input_size[1], 3])
-output_layer = YOLOv4(input_layer, grid_size, num_classes, strides, anchors, xyscales, args.asymetric, input_size[0])
-yolo = tf.keras.Model(input_layer, output_layer)
 
+def get_compiled_model():
+    input_layer = tf.keras.layers.Input([input_size[0], input_size[1], 3])
+    output_layer = YOLOv4(input_layer, grid_size, num_classes, strides, anchors, xyscales, args.asymetric, input_size[0])
+    yolo = tf.keras.Model(input_layer, output_layer)
 
-if args.quantized_training:
-    import tensorflow_model_optimization as tfmot
+    if args.quantized_training:
+        import tensorflow_model_optimization as tfmot
 
-    def apply_quantization(layer):
-        if isinstance(layer, tf.keras.layers.Conv2D):
-            return tfmot.quantization.keras.quantize_annotate_layer(layer)
-        return layer
+        def apply_quantization(layer):
+            if isinstance(layer, tf.keras.layers.Conv2D):
+                return tfmot.quantization.keras.quantize_annotate_layer(layer)
+            return layer
 
-    yolo = tf.keras.models.clone_model(yolo, clone_function=apply_quantization)
+        yolo = tf.keras.models.clone_model(yolo, clone_function=apply_quantization)
 
-    with tfmot.quantization.keras.quantize_scope({}):
-        # Use `quantize_apply` to actually make the model quantization aware.
-        yolo = tfmot.quantization.keras.quantize_apply(yolo)
+        with tfmot.quantization.keras.quantize_scope({}):
+            # Use `quantize_apply` to actually make the model quantization aware.
+            yolo = tfmot.quantization.keras.quantize_apply(yolo)
 
-optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-loss_iou_type = "ciou"
-loss_verbose = 0
-yolo.compile(
-    optimizer=optimizer,
-    loss=train.YOLOv4Loss(
-        batch_size=batch_size,
-        iou_type=loss_iou_type,
-        verbose=loss_verbose
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+    loss_iou_type = "ciou"
+    loss_verbose = 0
+    yolo.compile(
+        optimizer=optimizer,
+        loss=train.YOLOv4Loss(
+            batch_size=batch_size,
+            iou_type=loss_iou_type,
+            verbose=loss_verbose
+        )
     )
-)
+    return yolo
 
-# print("Tensorboard Version: ", tensorboard.__version__)
+def make_or_restore_model():
+    # Either restore the latest model, or create a fresh one
+    # if there is no checkpoint available.
+    checkpoints = [checkpoint_dir + name for name in os.listdir(checkpoint_dir)]
+    if checkpoints:
+        latest_checkpoint = max(checkpoints, key=os.path.getctime)
+        print("Restoring from", latest_checkpoint)
+        return tf.keras.models.load_model(latest_checkpoint, custom_objects={'YOLOv4Loss': train.YOLOv4Loss})
+    print("Creating a new model")
+    return get_compiled_model()
 
+yolo = make_or_restore_model()
 
-from shutil import copyfile
-
-if not os.path.isdir('./models'):
-   os.mkdir('./models')
-if not os.path.isdir('./models/'+ args.folder_name):
-   os.mkdir('./models/'+ args.folder_name)
-copyfile('./train_coco.py', './models/' + args.folder_name + '/train_coco.py')
-
-logdir = "logs/fit/" + args.folder_name
-tensorboard_callback = tf.keras.callbacks.TensorBoard(
-    log_dir=logdir, histogram_freq=10)
 
 callbacks = [
     tf.keras.callbacks.LearningRateScheduler(lr_scheduler),
     tf.keras.callbacks.TerminateOnNaN(),
-    tensorboard_callback
+    tf.keras.callbacks.TensorBoard(
+        log_dir=log_dir, 
+        histogram_freq=10
+    ),
+    tf.keras.callbacks.ModelCheckpoint(
+        filepath=checkpoint_dir + 'model_{epoch}',
+        save_freq='epoch'
+    )
 ]
 
 steps_per_epoch = 100
