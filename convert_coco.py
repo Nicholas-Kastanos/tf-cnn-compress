@@ -25,7 +25,7 @@ parser.add_argument('-q', '--quantized_training', action='store_true', default=F
 parser.add_argument('-a', '--asymetric', action='store_true', default=False)
 args = parser.parse_args()
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 # gpus = tf.config.experimental.list_physical_devices('GPU')
 # print(gpus)
 
@@ -60,19 +60,19 @@ use_asymetric_conv = False
 
 
 
-model_dir = 'models/' + args.folder_name
-if not os.path.isdir(model_dir):
-   os.makedirs(model_dir)
+# model_dir = 'models/' + args.folder_name
+# if not os.path.isdir(model_dir):
+#    os.makedirs(model_dir)
 
-log_dir = "logs/fit/" + args.folder_name
-if not os.path.isdir(log_dir):
-   os.makedirs(log_dir)
+# log_dir = "logs/fit/" + args.folder_name
+# if not os.path.isdir(log_dir):
+#    os.makedirs(log_dir)
 
-checkpoint_dir = model_dir + '/checkpoints/'
-if not os.path.exists(checkpoint_dir):
-    os.makedirs(checkpoint_dir)
+# checkpoint_dir = model_dir + '/checkpoints/'
+# if not os.path.exists(checkpoint_dir):
+#     os.makedirs(checkpoint_dir)
 
-copyfile('./train_coco.py', model_dir + '/train_coco.py')
+# copyfile('./train_coco.py', model_dir + '/train_coco.py')
 
 lr = cfg.TRAIN.LR
 def lr_scheduler(epoch):
@@ -217,12 +217,13 @@ def resize_image(image, ground_truth):
         scale = input_size[1] / height
 
     # Resize
-
-    width = int(round(width * scale))
-    height = int(round(height * scale))
-    padded_image = tf.image.resize_with_pad(
-        image, input_size[1], input_size[0])
-
+    if scale != 1:
+        width = int(round(width * scale))
+        height = int(round(height * scale))
+        padded_image = tf.image.resize_with_pad(
+            image, input_size[1], input_size[0])
+    else:
+        padded_image = np.copy(image)
 
     # Resize ground truth
     dw = input_size[0] - width
@@ -286,8 +287,10 @@ def coco_to_yolo(features):
 
     labels = tf.reshape(labels, (tf.shape(labels)[0], 1))
     position = tf.concat([x_center, y_center, width, height], axis=1)
+    print(position)
     modified_bboxes = tf.concat(
         [position, tf.cast(labels, tf.float32)], axis=1)
+    print(modified_bboxes)
 
     # Filters bboxes to included classes
     modified_bboxes = tf.numpy_function(
@@ -306,9 +309,6 @@ def coco_to_yolo(features):
 
 
     image = features["image"]
-    # plt.imshow(media.draw_bboxes(image, modified_bboxes, class_dict))
-    # plt.show()
-
     image, modified_bboxes = tf.numpy_function(
         func=resize_image,
         inp=[image, modified_bboxes],
@@ -328,6 +328,7 @@ def coco_to_yolo(features):
 
     for i, _size in enumerate(grid_size):
         ground_truth[i].set_shape((1, _size[0], _size[1], 3, num_classes + 5))
+        print((1, _size[0], _size[1], 3, num_classes + 5))
 
     return (image, (ground_truth[0], ground_truth[1], ground_truth[2]))
 
@@ -348,131 +349,24 @@ def filter_fn(image, ground_truth):
 #     # plt.imshow(image)
 #     # plt.show()
 
-ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
-    .filter(filter_fn) \
-    .shuffle(100) \
-    .cache() \
-    .batch(batch_size) \
-    .prefetch(tf.data.experimental.AUTOTUNE)
+ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
+    filter_fn).cache().shuffle(1000).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
-ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
-    .filter(filter_fn) \
-    .cache() \
-    .batch(batch_size) \
-    .prefetch(tf.data.experimental.AUTOTUNE)
-
-# print("Checking Train")
-# num_nans = 0
-# idx = 0
-# for example in ds_train:
-#     idx+=1
-#     num_nans+=np.count_nonzero(np.isnan(example[0].numpy()))
-#     gt = example[1]
-#     num_nans+=np.count_nonzero(np.isnan(gt[0].numpy()))
-#     num_nans+=np.count_nonzero(np.isnan(gt[1].numpy()))
-#     num_nans+=np.count_nonzero(np.isnan(gt[2].numpy()))
-#     if idx%100==0:
-#         print(idx, num_nans)
-# print(num_nans)
-
-# print("Check Val")
-# num_nans = 0
-# idx = 0
-# for example in ds_val:
-#     idx+=1
-#     num_nans+=np.count_nonzero(np.isnan(example[0].numpy()))
-#     gt = example[1]
-#     num_nans+=np.count_nonzero(np.isnan(gt[0].numpy()))
-#     num_nans+=np.count_nonzero(np.isnan(gt[1].numpy()))
-#     num_nans+=np.count_nonzero(np.isnan(gt[2].numpy()))
-#     if idx%100==0:
-#         print(idx, num_nans)
-# print(num_nans)
-
-# print("Checking Val")
-# test_val = np.count_nonzero(~np.isnan(tfds.as_numpy(ds_val)))
-# print("Nans", test_val)
-
-tf.keras.backend.clear_session()
-
-def get_compiled_model():
-    input_layer = tf.keras.layers.Input([input_size[0], input_size[1], 3])
-    output_layer = YOLOv4(input_layer, grid_size, num_classes, strides, anchors, xyscales, args.asymetric, input_size[0])
-    yolo = tf.keras.Model(input_layer, output_layer)
-
-    if args.quantized_training:
-        import tensorflow_model_optimization as tfmot
-
-        def apply_quantization(layer):
-            if isinstance(layer, tf.keras.layers.Conv2D):
-                return tfmot.quantization.keras.quantize_annotate_layer(layer)
-            return layer
-
-        yolo = tf.keras.models.clone_model(yolo, clone_function=apply_quantization)
-
-        with tfmot.quantization.keras.quantize_scope({}):
-            # Use `quantize_apply` to actually make the model quantization aware.
-            yolo = tfmot.quantization.keras.quantize_apply(yolo)
-
-    optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
-    loss_iou_type = "ciou"
-    loss_verbose = 0
-    yolo.compile(
-        optimizer=optimizer,
-        loss=train.YOLOv4Loss(
-            batch_size=batch_size,
-            iou_type=loss_iou_type,
-            verbose=loss_verbose
-        )
-    )
-    return yolo
-
-def make_or_restore_model():
-    # Either restore the latest model, or create a fresh one
-    # if there is no checkpoint available.
-    checkpoints = [checkpoint_dir + name for name in os.listdir(checkpoint_dir)]
-    if checkpoints:
-        latest_checkpoint = max(checkpoints, key=os.path.getctime)
-        print("Restoring from", latest_checkpoint)
-        return tf.keras.models.load_model(latest_checkpoint, custom_objects={'YOLOv4Loss': train.YOLOv4Loss})
-    print("Creating a new model")
-    return get_compiled_model()
-
-yolo = make_or_restore_model()
+ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE).filter(
+    filter_fn).cache().batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
 
-callbacks = [
-    tf.keras.callbacks.LearningRateScheduler(lr_scheduler),
-    tf.keras.callbacks.TerminateOnNaN(),
-    tf.keras.callbacks.TensorBoard(
-        log_dir=log_dir, 
-        histogram_freq=1
-    ),
-    tf.keras.callbacks.ModelCheckpoint(
-        filepath=checkpoint_dir + 'model_{epoch}',
-        save_freq='epoch',
-        period=5
-    )
-]
+print(ds_info)
 
-steps_per_epoch = 100
-validation_steps = 50
-validation_freq = 5
 
-# yolo.summary()
+# def generator():
+#     for features in features_dataset:
+#         yield serialize_example(*features)
 
-# tf.keras.utils.plot_model(yolo, show_shapes=True, show_layer_names=True, to_file='model.png')
+# serialized_features_dataset = tf.data.Dataset.from_generator(
+#     generator, output_types=tf.string, output_shapes=())
 
-# verbose = 0
-yolo.fit(
-    ds_train,
-    epochs=epochs,
-    # verbose=verbose,
-    callbacks=callbacks,
-    validation_data=ds_val,
-    steps_per_epoch=steps_per_epoch,
-    validation_steps=validation_steps,
-    validation_freq=validation_freq
-)
 
-yolo.save('./models/' + args.folder_name + '/model')
+# file_name = data_dir + 'yolo/classes_20_size_416'
+# writer = tf.data.experimental.TFRecordWriter(file_name)
+# writer.write(serialized_features_dataset)
