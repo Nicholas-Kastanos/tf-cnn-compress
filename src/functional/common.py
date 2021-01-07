@@ -101,7 +101,7 @@ def darknet_conv(
         )(x)
 
     if bn:
-        conv = BatchNormalization()(conv)
+        conv = tf.keras.layers.BatchNormalization()(conv)
     if activate == True:
         if activate_type == "leaky":
             conv = tf.keras.layers.LeakyReLU(alpha=0.1)(conv)

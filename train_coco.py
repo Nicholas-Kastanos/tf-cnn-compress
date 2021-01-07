@@ -23,9 +23,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-n', '--folder_name', default=datetime.now().strftime("%Y%m%d-%H%M%S"))
 parser.add_argument('-q', '--quantized_training', action='store_true', default=False)
 parser.add_argument('-a', '--asymetric', action='store_true', default=False)
+parser.add_argument('-e', '--epochs', type=int, default=50)
+parser.add_argument('-b', '--batch_size', type=int, default=1)
+parser.add_argument('-i', '--input_size', type=int, default=416)
+parser.add_argument('--data_dir', default=os.path.join('/', 'media', 'nicholas', 'Data', 'nicho', 'Documents', 'tensorflow_datasets'))
 args = parser.parse_args()
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 # gpus = tf.config.experimental.list_physical_devices('GPU')
 # print(gpus)
 
@@ -35,36 +39,27 @@ try:
 except:
     IN_COLAB = False
 
-if IN_COLAB:
-    data_dir = 'gs://tfds-data/datasets'
-else:
-    data_dir = os.path.join('/', 'media', 'nicholas',
-                            'Data', 'nicho', 'Documents', 'tensorflow_datasets')
-
+data_dir = args.data_dir
+epochs = args.epochs
+batch_size = args.batch_size
+input_size = (args.input_size, args.input_size)
+quantized_training = args.quantized_training
+use_asymetric_conv = args.asymetric
+folder_name = args.folder_name
 
 (ds_train, ds_val), ds_info = tfds.load(
     'coco/2017',
-    split=['train', 'test'],
-    shuffle_files=True,
+    split=['train', 'validation'],
     with_info=True,
     data_dir=data_dir,
     try_gcs=IN_COLAB
 )
 
-epochs = 50
-batch_size = 1
-input_size = (416, 416)
-# input_size = (256, 256) 
-quantized_training = False
-use_asymetric_conv = False
-
-
-
-model_dir = 'models/' + args.folder_name
+model_dir = 'models/' + folder_name
 if not os.path.isdir(model_dir):
    os.makedirs(model_dir)
 
-log_dir = "logs/fit/" + args.folder_name
+log_dir = "logs/fit/" + folder_name
 if not os.path.isdir(log_dir):
    os.makedirs(log_dir)
 
@@ -289,6 +284,15 @@ def coco_to_yolo(features):
     modified_bboxes = tf.concat(
         [position, tf.cast(labels, tf.float32)], axis=1)
 
+    # tf.print(tf.shape(bboxes), tf.shape(labels))
+    # plt.imshow(media.draw_bboxes(features["image"], modified_bboxes, dict(
+    #     zip(
+    #         range(len(ds_info.features["objects"]["label"].names)),
+    #         ds_info.features["objects"]["label"].names
+    #     )
+    # )))
+    # plt.show()
+
     # Filters bboxes to included classes
     modified_bboxes = tf.numpy_function(
         func=exclude_classes,
@@ -304,20 +308,23 @@ def coco_to_yolo(features):
         if tf.random.uniform(shape=()) < tf.constant(chance_to_remove_person_only_images):
             modified_bboxes = tf.reshape(tf.convert_to_tensor(()), (0, 5))
 
+    # Remove invalid images
+    if tf.shape(modified_bboxes)[0] == 0:
+        image = tf.constant(np.nan, shape=(input_size[0], input_size[1], 3))
+        # tf.print("Removed")
+    else:
+        image = features["image"]
+        # plt.imshow(media.draw_bboxes(image, modified_bboxes, class_dict))
+        # plt.show()
+        image, modified_bboxes = tf.numpy_function(
+            func=resize_image,
+            inp=[image, modified_bboxes],
+            Tout=[tf.float32, tf.float32]
+        )
+        # plt.imshow(media.draw_bboxes(image, modified_bboxes, class_dict))
+        # plt.show()
 
-    image = features["image"]
-    # plt.imshow(media.draw_bboxes(image, modified_bboxes, class_dict))
-    # plt.show()
-
-    image, modified_bboxes = tf.numpy_function(
-        func=resize_image,
-        inp=[image, modified_bboxes],
-        Tout=[tf.float32, tf.float32]
-    )
-
-    # plt.imshow(media.draw_bboxes(image, modified_bboxes, class_dict))
-    # plt.show()
-
+    # Convert from xywhc to yolo ground truth
     ground_truth = tf.numpy_function(
         func=bboxes_to_ground_truth,
         inp=[modified_bboxes],
@@ -331,76 +338,38 @@ def coco_to_yolo(features):
 
     return (image, (ground_truth[0], ground_truth[1], ground_truth[2]))
 
-
 def filter_fn(image, ground_truth):
-    if(tf.size(ground_truth[0]) == 0):
-        return False
-    return True
+    image_ok = tf.reduce_all(tf.math.is_finite(image))
+    gt_0_ok = tf.reduce_all(tf.math.is_finite(ground_truth[0]))
+    gt_1_ok = tf.reduce_all(tf.math.is_finite(ground_truth[1]))
+    gt_2_ok = tf.reduce_all(tf.math.is_finite(ground_truth[2]))
+    return tf.reduce_all([image_ok, gt_0_ok, gt_1_ok, gt_2_ok])
 
 
-# for example in ds_train.skip(5).take(5):
+# for example in ds_val.take(10):
 #     mapped = coco_to_yolo(example)
-#     # image = mapped[0]
-#     # ground_truth = mapped[1]
-#     # for gt in ground_truth:
-#     # print(tf.shape(gt))
-#     # print(image.shape)
-#     # plt.imshow(image)
-#     # plt.show()
 
 ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
     .filter(filter_fn) \
-    .shuffle(100) \
-    .cache() \
+    .shuffle(1000) \
     .batch(batch_size) \
+    .cache() \
     .prefetch(tf.data.experimental.AUTOTUNE)
 
 ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
     .filter(filter_fn) \
-    .cache() \
     .batch(batch_size) \
+    .cache() \
     .prefetch(tf.data.experimental.AUTOTUNE)
-
-# print("Checking Train")
-# num_nans = 0
-# idx = 0
-# for example in ds_train:
-#     idx+=1
-#     num_nans+=np.count_nonzero(np.isnan(example[0].numpy()))
-#     gt = example[1]
-#     num_nans+=np.count_nonzero(np.isnan(gt[0].numpy()))
-#     num_nans+=np.count_nonzero(np.isnan(gt[1].numpy()))
-#     num_nans+=np.count_nonzero(np.isnan(gt[2].numpy()))
-#     if idx%100==0:
-#         print(idx, num_nans)
-# print(num_nans)
-
-# print("Check Val")
-# num_nans = 0
-# idx = 0
-# for example in ds_val:
-#     idx+=1
-#     num_nans+=np.count_nonzero(np.isnan(example[0].numpy()))
-#     gt = example[1]
-#     num_nans+=np.count_nonzero(np.isnan(gt[0].numpy()))
-#     num_nans+=np.count_nonzero(np.isnan(gt[1].numpy()))
-#     num_nans+=np.count_nonzero(np.isnan(gt[2].numpy()))
-#     if idx%100==0:
-#         print(idx, num_nans)
-# print(num_nans)
-
-# print("Checking Val")
-# test_val = np.count_nonzero(~np.isnan(tfds.as_numpy(ds_val)))
-# print("Nans", test_val)
 
 tf.keras.backend.clear_session()
 
 def get_compiled_model():
     input_layer = tf.keras.layers.Input([input_size[0], input_size[1], 3])
-    output_layer = YOLOv4(input_layer, grid_size, num_classes, strides, anchors, xyscales, args.asymetric, input_size[0])
+    output_layer = YOLOv4(input_layer, grid_size, num_classes, strides, anchors, xyscales, use_asymetric_conv, input_size[0])
     yolo = tf.keras.Model(input_layer, output_layer)
 
-    if args.quantized_training:
+    if quantized_training:
         import tensorflow_model_optimization as tfmot
 
         def apply_quantization(layer):
@@ -446,7 +415,8 @@ callbacks = [
     tf.keras.callbacks.TerminateOnNaN(),
     tf.keras.callbacks.TensorBoard(
         log_dir=log_dir, 
-        histogram_freq=1
+        histogram_freq=1,
+        profile_batch=(2, 22)
     ),
     tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_dir + 'model_{epoch}',
@@ -475,4 +445,4 @@ yolo.fit(
     validation_freq=validation_freq
 )
 
-yolo.save('./models/' + args.folder_name + '/model')
+yolo.save('./models/' + folder_name + '/model')

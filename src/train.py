@@ -65,9 +65,6 @@ class YOLOv4Loss(Loss):
         else:
             _, g_height, g_width, _, box_size = y_pred.shape
 
-        tf.debugging.check_numerics(y_true, "y_true is not valid")
-        tf.debugging.check_numerics(y_pred, "y_pred is not valid")
-
         y_true = tf.reshape(
             y_true, shape=(-1, g_height * g_width * 3, box_size)
         )
