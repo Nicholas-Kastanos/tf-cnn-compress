@@ -97,12 +97,11 @@ class Yolo(tfds.core.GeneratorBasedBuilder):
             features=tfds.features.FeaturesDict({
                 # These are the features of your dataset like images, labels ...
                 'image': tfds.features.Image(shape=self.input_size, dtype=tf.uint8),
-                'xywhc': tfds.features.Tensor(shape=(None, 5), dtype=tf.float32),
-                'gt_s': tfds.features.Tensor(shape=(1, self.grid_size[0][0].item(), self.grid_size[0][0].item(), 3, self.num_classes + 5), dtype=tf.float32),
-                'gt_m': tfds.features.Tensor(shape=(1, self.grid_size[1][0].item(), self.grid_size[1][1].item(), 3, self.num_classes + 5), dtype=tf.float32),
-                'gt_l': tfds.features.Tensor(shape=(1, self.grid_size[2][0].item(), self.grid_size[2][1].item(), 3, self.num_classes + 5), dtype=tf.float32),
+                'gt_s': tfds.features.Tensor(shape=(1, self.grid_size[0][0].item(), self.grid_size[0][0].item(), 3, self.num_classes + 5), dtype=tf.uint8),
+                'gt_m': tfds.features.Tensor(shape=(1, self.grid_size[1][0].item(), self.grid_size[1][1].item(), 3, self.num_classes + 5), dtype=tf.uint8),
+                'gt_l': tfds.features.Tensor(shape=(1, self.grid_size[2][0].item(), self.grid_size[2][1].item(), 3, self.num_classes + 5), dtype=tf.uint8),
             }),
-            supervised_keys=('image', 'xywhc'), 
+            supervised_keys=None, 
             homepage='https://https://github.com/Nicholas-Kastanos/TrafficEmu/',
             citation=_CITATION,
         )
@@ -124,10 +123,9 @@ class Yolo(tfds.core.GeneratorBasedBuilder):
         for example in dataset:
             yield example['image_id'].numpy().item(), {
                 'image': tf.cast(example['image'] * 255, tf.uint8).numpy(),
-                'xywhc': example['xywhc'].numpy(),
-                'gt_s': example['gt_s'].numpy(),
-                'gt_m': example['gt_m'].numpy(),
-                'gt_l': example['gt_l'].numpy(),
+                'gt_s': tf.cast(example['gt_s'] * 255, tf.uint8).numpy(),
+                'gt_m': tf.cast(example['gt_m'] * 255, tf.uint8).numpy(),
+                'gt_l': tf.cast(example['gt_l'] * 255, tf.uint8).numpy(),
             }
 
     def _bboxes_to_ground_truth(self, bboxes):
@@ -349,12 +347,9 @@ class Yolo(tfds.core.GeneratorBasedBuilder):
         for i, _size in enumerate(self.grid_size):
             ground_truth[i].set_shape((1, _size[0], _size[1], 3, self.num_classes + 5))
 
-        modified_bboxes.set_shape([None, 5])
-
         return {
             'image_id': features['image/id'],
             'image': image,
-            'xywhc': modified_bboxes,
             'gt_s': ground_truth[0],
             'gt_m': ground_truth[1],
             'gt_l': ground_truth[2]
@@ -362,8 +357,7 @@ class Yolo(tfds.core.GeneratorBasedBuilder):
 
     def _filter_fn(self, d: dict):
         image_ok = tf.reduce_all(tf.math.is_finite(d['image']))
-        bboxes_ok = tf.reduce_all(tf.math.is_finite(d['xywhc']))
         gt_0_ok = tf.reduce_all(tf.math.is_finite(d['gt_s']))
         gt_1_ok = tf.reduce_all(tf.math.is_finite(d['gt_m']))
         gt_2_ok = tf.reduce_all(tf.math.is_finite(d['gt_l']))
-        return tf.reduce_all([image_ok, bboxes_ok, gt_0_ok, gt_1_ok, gt_2_ok])
+        return tf.reduce_all([image_ok, gt_0_ok, gt_1_ok, gt_2_ok])
