@@ -90,6 +90,7 @@ class Yolo(tfds.core.GeneratorBasedBuilder):
 
         
         # TODO(yolo): Specifies the tfds.core.DatasetInfo object
+
         return tfds.core.DatasetInfo(
             builder=self,
             description=_DESCRIPTION,
@@ -97,15 +98,12 @@ class Yolo(tfds.core.GeneratorBasedBuilder):
                 # These are the features of your dataset like images, labels ...
                 'image': tfds.features.Image(shape=self.input_size, dtype=tf.uint8),
                 'xywhc': tfds.features.Tensor(shape=(None, 5), dtype=tf.float32),
-                'gt_s': tfds.features.Tensor(shape=(1, self.grid_size[0][0], self.grid_size[0][0], 3, self.num_classes + 5), dtype=tf.float32),
-                'gt_m': tfds.features.Tensor(shape=(1, self.grid_size[1][0], self.grid_size[1][1], 3, self.num_classes + 5), dtype=tf.float32),
-                'gt_l': tfds.features.Tensor(shape=(1, self.grid_size[2][0], self.grid_size[2][1], 3, self.num_classes + 5), dtype=tf.float32),
+                'gt_s': tfds.features.Tensor(shape=(1, self.grid_size[0][0].item(), self.grid_size[0][0].item(), 3, self.num_classes + 5), dtype=tf.float32),
+                'gt_m': tfds.features.Tensor(shape=(1, self.grid_size[1][0].item(), self.grid_size[1][1].item(), 3, self.num_classes + 5), dtype=tf.float32),
+                'gt_l': tfds.features.Tensor(shape=(1, self.grid_size[2][0].item(), self.grid_size[2][1].item(), 3, self.num_classes + 5), dtype=tf.float32),
             }),
-            # If there's a common (input, target) tuple from the
-            # features, specify them here. They'll be used if
-            # `as_supervised=True` in `builder.as_dataset`.
-            supervised_keys=None,  # e.g. ('image', 'label')
-            homepage='https://dataset-homepage/',
+            supervised_keys=('image', 'xywhc'), 
+            homepage='https://https://github.com/Nicholas-Kastanos/TrafficEmu/',
             citation=_CITATION,
         )
 
@@ -122,8 +120,9 @@ class Yolo(tfds.core.GeneratorBasedBuilder):
         """Yields examples."""
         # TODO(yolo): Yields (key, example) tuples from the dataset
         dataset = dataset.map(self._coco_to_yolo).filter(self._filter_fn)
+
         for example in dataset:
-            yield str(example['image_id'].numpy()), {
+            yield example['image_id'].numpy().item(), {
                 'image': tf.cast(example['image'] * 255, tf.uint8).numpy(),
                 'xywhc': example['xywhc'].numpy(),
                 'gt_s': example['gt_s'].numpy(),
