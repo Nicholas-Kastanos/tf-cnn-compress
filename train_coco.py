@@ -12,13 +12,7 @@ import tensorboard
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
-# import src.predict as predict
-import src.media as media
-# import src.dataset as dataset
-import src.train as train
-from src.functional.config import cfg
-from src.functional.yolov4 import YOLOv4
-import yolo
+from src.yolo import media, train, cfg, YOLOv4
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-n', '--folder_name', default=datetime.now().strftime("%Y%m%d-%H%M%S"))
@@ -48,32 +42,22 @@ quantized_training = args.quantized_training
 use_asymetric_conv = args.asymetric
 folder_name = args.folder_name
 
-use_yolo=True
-if use_yolo:
-    (ds_train, ds_val), ds_info = tfds.load(
-        'yolo',
-        split=['train', 'validation'],
-        with_info=True,
-        data_dir=data_dir
+(ds_train, ds_val), ds_info = tfds.load(
+    'coco/2017',
+    split=['train', 'validation'],
+    with_info=True,
+    data_dir=data_dir,
+    try_gcs=IN_COLAB
+)
+included_classes = ds_info.features["objects"]["label"].names[:20]
+num_classes = len(included_classes)
+class_dict = dict(
+    zip(
+        range(num_classes),
+        included_classes
     )
-    num_classes=20
-else:
-    (ds_train, ds_val), ds_info = tfds.load(
-        'coco/2017',
-        split=['train', 'validation'],
-        with_info=True,
-        data_dir=data_dir,
-        try_gcs=IN_COLAB
-    )
-    included_classes = ds_info.features["objects"]["label"].names[:20]
-    num_classes = len(included_classes)
-    class_dict = dict(
-        zip(
-            range(num_classes),
-            included_classes
-        )
-    )
-    included_classes_idxs = np.asarray(list(class_dict.keys()))
+)
+included_classes_idxs = np.asarray(list(class_dict.keys()))
 
 model_dir = 'models/' + folder_name
 if not os.path.isdir(model_dir):
@@ -361,28 +345,16 @@ def filter_fn(image, ground_truth):
 # for example in ds_val.take(10):
 #     mapped = coco_to_yolo(example)
 
-def yolo_to_yolo(features):
-    image = tf.cast(features['image'] / 255 , dtype=tf.float32)
-    gt_s = tf.cast(features['gt_s'] / 255 , dtype=tf.float32)
-    gt_m = tf.cast(features['gt_m'] / 255 , dtype=tf.float32)
-    gt_l = tf.cast(features['gt_l'] / 255 , dtype=tf.float32)
-    return (image, (gt_s, gt_m, gt_l))
-
-if use_yolo:
-    ds_train = ds_train.map(yolo_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    ds_val = ds_val.map(yolo_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-else:
-    ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
-        .filter(filter_fn)
-    ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
-        .filter(filter_fn) \
-
-ds_train = ds_train.shuffle(1000) \
+ds_train = ds_train.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
+    .filter(filter_fn) \
+    .shuffle(1000) \
     .batch(batch_size) \
     .cache() \
     .prefetch(tf.data.experimental.AUTOTUNE)
 
-ds_val = ds_val.batch(batch_size) \
+ds_val = ds_val.map(coco_to_yolo, num_parallel_calls=tf.data.experimental.AUTOTUNE) \
+    .filter(filter_fn) \
+    .batch(batch_size) \
     .cache() \
     .prefetch(tf.data.experimental.AUTOTUNE)
 

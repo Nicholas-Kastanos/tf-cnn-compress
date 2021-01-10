@@ -1,5 +1,5 @@
 import tensorflow as tf
-import src.functional.common as common
+from . import common
 
 def panet(x, NUM_CLASS, use_asymetric_conv=False, activate_type="leaky"):
     route_1, route_2, conv = x

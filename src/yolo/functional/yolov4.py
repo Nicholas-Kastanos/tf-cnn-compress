@@ -3,12 +3,8 @@
 
 import numpy as np
 import tensorflow as tf
-# import functional.utils as utils
-# import src.functional.common as common
-import src.functional.backbone as backbone
-import src.functional.neck as neck
-import src.functional.head as head
-# from functional.config import cfg
+
+from . import backbone, head, neck
 
 # NUM_CLASS       = len(utils.read_class_names(cfg.YOLO.CLASSES))
 # STRIDES         = np.array(cfg.YOLO.STRIDES)
