@@ -146,6 +146,8 @@ def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, de
         callbacks=callbacks
     )
 
+    model.save('./models/' + folder_name + '/model')
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-n', '--folder_name', default=datetime.now().strftime("%Y%m%d-%H%M%S"))
