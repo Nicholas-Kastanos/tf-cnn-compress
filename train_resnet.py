@@ -125,7 +125,7 @@ def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, de
     # Trainable params: 13,514,058
     # Non-trainable params: 45,440
 
-    # ResNet50V2 Both
+    # ResNet50V2 Both, But breaks
     # Total params: 14,805,642
     # Trainable params: 14,760,202
     # Non-trainable params: 45,440
@@ -146,7 +146,7 @@ def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, de
         callbacks=callbacks
     )
 
-    model.save('./models/' + folder_name + '/model')
+    model.save(model_dir + '/model')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
