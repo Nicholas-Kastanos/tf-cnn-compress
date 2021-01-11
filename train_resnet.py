@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-n', '--folder_name', default=datetime.now().strftime("%Y%m%d-%H%M%S"))
 parser.add_argument('-q', '--quantized_training', action='store_true', default=False)
 parser.add_argument('-a', '--asymetric', action='store_true', default=False)
+parser.add_argument('-d', '--depthwise', action='store_true', default=False)
 parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('-b', '--batch_size', type=int, default=32)
 parser.add_argument('-i', '--input_size', type=int, default=32)
@@ -32,18 +33,25 @@ epochs = args.epochs
 batch_size = args.batch_size
 input_size = (args.input_size, args.input_size, 3)
 quantized_training = args.quantized_training
-use_asymetric_conv = args.asymetric
+asymetric_conv = args.asymetric
+depthwise_conv = args.depthwise
 folder_name = args.folder_name
 
 (X_train, Y_train), (X_test, Y_test) = cifar10.load_data()
 Y_train = tf.keras.utils.to_categorical(Y_train, 10)
 Y_test = tf.keras.utils.to_categorical(Y_test, 10)
 
-mean_image = np.mean(X_train, axis=0)
-X_train = X_train - mean_image
-X_test = X_test - mean_image 
-X_train = X_train/128. 
-X_test = X_test/128. 
+# Rescale
+X_train = X_train/255. 
+X_test = X_test/255. 
+
+ds_train = tf.data.Dataset.from_tensor_slices((X_train, Y_train)).shuffle(100).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
+ds_val = tf.data.Dataset.from_tensor_slices((X_test, Y_test)).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
+
+# Subtract Mean
+# mean_image = np.mean(X_train, axis=0)
+# X_train = X_train - mean_image
+# X_test = X_test - mean_image 
 
 model_dir = 'models/' + folder_name
 if not os.path.isdir(model_dir):
@@ -61,12 +69,27 @@ copyfile('./train_resnet.py', model_dir + '/train_resnet.py')
 
 
 def get_compiled_model():
-    input_layer=tf.keras.layers.Input(input_size)
+    model_input=tf.keras.layers.Input(input_size)
     ## Preprocessing Layers Here ##
-
+    model_input = tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal")(model_input)
+    model_input = tf.keras.layers.experimental.preprocessing.RandomRotation(0.1)(model_input)
+    model_input = tf.keras.layers.experimental.preprocessing.RandomZoom(0.1)(model_input)
     ###############################
-    model_input = input_layer
-    model = resnet_50(model_input)
+    model = resnet_50(model_input, spatial_sep_conv=asymetric_conv, depthwise_sep_conv=depthwise_conv)
+    if quantized_training:
+        import tensorflow_model_optimization as tfmot
+        def apply_quantization(layer):
+            if isinstance(layer, tf.keras.layers.Conv2D):
+                return tfmot.quantization.keras.quantize_annotate_layer(layer)
+            if isinstance(layer, tf.keras.layers.SeparableConv2D):
+                return tfmot.quantization.keras.quantize_annotate_layer(layer)
+            if isinstance(layer, tf.keras.layers.Dense):
+                return tfmot.quantization.keras.quantize_annotate_layer(layer)
+            return layer
+        model = tf.keras.models.clone_model(model, clone_function=apply_quantization)
+        with tfmot.quantization.keras.quantize_scope({}):
+            # Use `quantize_apply` to actually make the model quantization aware.
+            model = tfmot.quantization.keras.quantize_apply(model)
     optimizer = tf.keras.optimizers.Adam()
     model.compile(
         loss=tf.keras.losses.categorical_crossentropy,
@@ -91,8 +114,8 @@ model = make_or_restore_model()
 callbacks = [
     tf.keras.callbacks.TensorBoard(
         log_dir=log_dir, 
-        histogram_freq=1,
-        profile_batch=(2, 22)
+        histogram_freq=5,
+        profile_batch=0
     ),
     tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_dir + 'model_{epoch}',
@@ -101,11 +124,40 @@ callbacks = [
     )
 ]
 
+model.summary()
+
+# ResNet50V2
+# Total params: 23,585,290
+# Trainable params: 23,539,850
+# Non-trainable params: 45,440
+
+# ResNet50V2 Spatial
+# Total params: 19,812,874
+# Trainable params: 19,767,434
+# Non-trainable params: 45,440
+
+# ResNet50V2 Depthwise
+# Total params: 13,559,498
+# Trainable params: 13,514,058
+# Non-trainable params: 45,440
+
+# ResNet50V2 Both
+# Total params: 14,805,642
+# Trainable params: 14,760,202
+# Non-trainable params: 45,440
+
+# model.fit(
+#     X_train,
+#     Y_train,
+#     batch_size=batch_size,
+#     epochs=epochs,
+#     validation_data=(X_test, Y_test),
+#     callbacks=callbacks
+# )
+
 model.fit(
-    X_train,
-    Y_train,
-    batch_size=batch_size,
+    ds_train,
     epochs=epochs,
-    validation_data=(X_test, Y_test),
+    validation_data=ds_val,
     callbacks=callbacks
 )
