@@ -67,7 +67,7 @@ if not os.path.exists(checkpoint_dir):
 
 copyfile('./train_resnet.py', model_dir + '/train_resnet.py')
 
-
+tf.keras.backend.clear_session()
 def get_compiled_model():
     model_input=tf.keras.layers.Input(input_size)
     ## Preprocessing Layers Here ##
