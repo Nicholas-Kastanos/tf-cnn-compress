@@ -72,7 +72,7 @@
 	
 	\subsection{Separable convolutions}
 	
-	Convolution Layers contain a vast majority of the parameters in modern CNNs. By targeting parameter reductions to these layers, the compression can be spread throughout the network. Separable convolutions reduce the number of parameters by separating the convolution into multiple stages through spatially and depthwise separable convolutions.
+	Convolution Layers contain a vast majority of the parameters in modern CNNs. By targeting parameter reductions to these layers, the compression can be spread throughout the network. Separable convolutions reduce the number of parameters by separating the convolution into multiple stages through spatially and depthwise separable convolutions. While these convolutions reduces the memory and computation requirements of the system, the reduction in parameters reduces the number of possible kernels explored in training, and the resulting network may be suboptimal.
 	
 	\subsubsection{Spatially separable convolutions}
 	
@@ -85,7 +85,7 @@
 	
 	Similarly, the multiplication operations of a spatially separated convolution are reduced. For a $M \times M$ input convolved with a $n \times n$ kernel, the number of multipications are reduced by a factor of $M_s(n)$ (see Equation~\ref{eqn:spat_ops}). 
 	
-	Equations~\ref{eqn:spat_params})~and~\ref{eqn:spat_ops} show that spatially separable convolutions show computational benefits when $n > 2$. Additionally the reduction in parameters reduces the number of possible kernels explored in training, and the resulting network may be suboptimal.
+	Equations~\ref{eqn:spat_params})~and~\ref{eqn:spat_ops} show that spatially separable convolutions show computational benefits when $n > 2$. 
 	
 	\begin{multicols}{2}
 		\begin{equation}\label{eqn:spat_params}
@@ -115,7 +115,11 @@
 	
 %	\subsection{Quantised Training} I dont know if I want to do this anymore. Maybe just post trainng quantization
 	
-	\subsection{8-bit compression}
+	\subsection{Quantization and datatype compression}
+	
+	Tensorflow, by default, uses 32-bit floating point precision for its network layers and training. Many resource-constrained devices do not have sufficient memory to use large neural networks, or may not have access to floating-point arithmetic units. Both of these factors can be mitigated by using low-precision integer datatypes, such as 8-bit integers. This effectively reduces the memory required for each parameter by \nicefrac{1}{4}. 
+	
+%	https://ieeexplore.ieee.org/abstract/document/8524017
 	
 	\section{Methodology}
 	
