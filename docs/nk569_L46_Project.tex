@@ -24,8 +24,10 @@
 \usepackage{url}            % simple URL typesetting
 \usepackage{booktabs}       % professional-quality tables
 \usepackage{amsfonts}       % blackboard math symbols
+\usepackage{amsmath}
 \usepackage{nicefrac}       % compact symbols for 1/2, etc.
 \usepackage{microtype}      % microtypography
+\usepackage{multicol}
 
 \title{Structural Compression of ResNet-like Convolutional Neural Networks}
 
@@ -56,19 +58,71 @@
 	\section{Introduction}
 	
 	
-	\section{Background}
 	
+	% objectives and purpose
+	
+	\section{Related Work}
+	%reasons behind work	
+	% can discuss relationships between existing knowledge and what is being done here	
 	\subsection{ResNet}
 	
-	\subsection{Separable Convolutions}
+	The residual block first postulated for use in ResNet has become a common-place feature in many subsequent networks (DenseNet, Inception). 
+	% ResNet https://arxiv.org/abs/1512.03385
+	% ResNet50V2 https://arxiv.org/abs/1603.05027
 	
-%	\subsection{Quantised Training}
+	\subsection{Separable convolutions}
 	
-	\subsection{8-bit Compression}
+	Convolution Layers contain a vast majority of the parameters in modern CNNs. By targeting parameter reductions to these layers, the compression can be spread throughout the network. Separable convolutions reduce the number of parameters by separating the convolution into multiple stages through spatially and depthwise separable convolutions.
+	
+	\subsubsection{Spatially separable convolutions}
+	
+	% References: Spatially Separable
+	% Inception v4: https://arxiv.org/pdf/1512.00567v3.pdf
+	% SqueezeNet mentions it https://arxiv.org/pdf/1602.07360.pdf
+	% MobileNet: https://arxiv.org/abs/1704.04861
+	
+	A convolution kernel can be decomposed on its 2D spatial axis, i.e. height and width. Conceptually, the $n \times n$ kernel can be separated into two smaller kernels, a $n \times 1$ followed by a $1 \times n$ kernel. These kernels can be applied in sequential convolutions to obtain the same output shape as the single convolution. These decomposed kernels scale the parameters required by the convolution by a factor $P_s(n)$ (see Equation~\ref{eqn:spat_params}). 
+	
+	Similarly, the multiplication operations of a spatially separated convolution are reduced. For a $M \times M$ input convolved with a $n \times n$ kernel, the number of multipications are reduced by a factor of $M_s(n)$ (see Equation~\ref{eqn:spat_ops}). 
+	
+	Equations~\ref{eqn:spat_params})~and~\ref{eqn:spat_ops} show that spatially separable convolutions show computational benefits when $n > 2$. Additionally the reduction in parameters reduces the number of possible kernels explored in training, and the resulting network may be suboptimal.
+	
+	\begin{multicols}{2}
+		\begin{equation}\label{eqn:spat_params}
+			P_s(n) = \frac{2}{n}
+		\end{equation}
+	\break
+		\begin{equation}\label{eqn:spat_ops}
+			\begin{split}
+				M_s(M, n) = & \frac{2}{n} + \frac{2}{n(M-2)} \\
+				\Rightarrow M_s(n) = & \frac{2}{n},~\text{where}~M >> n
+			\end{split}
+		\end{equation}		
+	\end{multicols}
+	
+	\subsubsection{Depthwise separable convolutions}	
+	% Depthwise Separable
+	% MobileNet https://arxiv.org/abs/1704.04861
+	% Xception: https://arxiv.org/abs/1610.02357
+	
+	Depthwise separable convolutions separate the spatial convolution from the depth of the filters. This is accomplished by an initial depthwise convolution, followed by a pointwise convolution. The initial depthwise convolution separates the channels of the input and kernel, and convolves them independently. The pointwise convolution is a $N_F \times 1 \times 1 \times N_C$ convolution where $N_F$ and $N_C$ are the number of filters and channels respectively. 
+	
+	The number of parameters $P_d(n)$ and multiplications $M_d(n)$ are reduced by the same factor, which can be seen in Equation~\ref{eqn:depthwise}. Many CNNs have $N_F >> 1$, therefore depthwise convolutions show compression kernel sizes greater than 1. 
+
+	\begin{equation} \label{eqn:depthwise}
+		P_d(n) = M_d(n) = \frac{1}{n^2} + \frac{1}{N_F} \approx \frac{1}{n^2}
+	\end{equation}
+	
+%	\subsection{Quantised Training} I dont know if I want to do this anymore. Maybe just post trainng quantization
+	
+	\subsection{8-bit compression}
 	
 	\section{Methodology}
 	
-	\section{Evaluation}
+	\section{Evaluation and results}
+	
+	% include implications of results
+	%Limitations
 	
 	\section{Conclusion}
 	
