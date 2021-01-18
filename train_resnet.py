@@ -24,7 +24,7 @@ def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, de
     (X_train, Y_train), _ = cifar10.load_data()
 
 
-    validation_split = 0.2
+    validation_split = 0.1
     X_train = X_train[:-int(X_train.shape[0]*validation_split)]
     Y_train = Y_train[:-int(Y_train.shape[0]*validation_split)]
     X_val = X_train[-int(X_train.shape[0]*validation_split):]
