@@ -28,6 +28,7 @@
 \usepackage{nicefrac}       % compact symbols for 1/2, etc.
 \usepackage{microtype}      % microtypography
 \usepackage{multicol}
+\usepackage{graphicx}
 
 \title{Structural Compression of ResNet-like Convolutional Neural Networks}
 
@@ -117,13 +118,62 @@
 	
 	\subsection{Quantization and datatype compression}
 	
-	Tensorflow, by default, uses 32-bit floating point precision for its network layers and training. Many resource-constrained devices do not have sufficient memory to use large neural networks, or may not have access to floating-point arithmetic units. Both of these factors can be mitigated by using low-precision integer datatypes, such as 8-bit integers. This effectively reduces the memory required for each parameter by \nicefrac{1}{4}. 
+	%	https://ieeexplore.ieee.org/abstract/document/8524017
+	Many resource-constrained devices do not have sufficient memory to use large neural networks, or may not have access to floating-point arithmetic units. Both of these factors can be mitigated by using low-precision integer datatypes, such as 8-bit integers. This effectively reduces the memory required for each parameter by \nicefrac{1}{4}. 
 	
-%	https://ieeexplore.ieee.org/abstract/document/8524017
+	However, by reducing the precision of the datatype, the learned parameters are not represeted fully, reducing the performance of the network. This has been shown to have significant effect on the network when reducing 32-bit floating point numbers to 8-bit integers, however quantization aware training can limit the impact. 
+	%	https://papers.nips.cc/paper/2018/file/e82c4b19b8151ddc25d4d93baf7b908f-Paper.pdf
+	
+	TensorFlow, by default, uses 32-bit floating point precision for its network layers and training. TensorFlow Lite provides functionality to convert trained models to quantized, 8-bit integer models, however it does not have native 8-bit implementations for all layer types. In the event an incompatible layer is used, the engine upscales the activations to the full precision for that layer.
 	
 	\section{Methodology}
+	% Use ResNet50V2
+	In order to asses the benefits and costs of the compression, a baseline architecture is established and used as a comparison reference point. The ResNet50V2 image classification CNN-based neural network is used as the baseline architecture. The baseline architecture and subsequent networks are trained using the same parameters using TensorFlow. 
+	
+	\subsection{Training}
+	%% how were the networks trained
+	
+	% Use of datasets CIFAR10
+	The CNNs are trained using the CIFAR-10 dataset, with random horizontal flips, rotations, and cropping. The Adam optimizer is used with a learning rate of $0.001$, and categorical crossentropy loss. The networks are trained for 30 epochs with a batch size of 32. 
+	
+	\subsection{Modified residual blocks}
+	
+	\begin{figure}[h!]
+		\centering
+		\includegraphics[width=0.5\textwidth]{images/conv-structure.pdf}
+		\caption{Example of replaced convolutions with separable convolutions with $N_F$ filters, kernel size $n$, and stride $k$. From top to bottom: Traditional Convolution; Spatially Separable Convolution; Depthwise Separable Convolution}
+		\label{fig:conv-structure}
+	\end{figure}
+	
+		% How were convolutions separated / chosen for separation
+	In order to modify the ResNetV2 network, the convolutions in the residual blocks are chosen to be substituted with separable convolutions. Additional batch normalization and activation layers are not added between these new layers. An example of this expansion can be seen in Figure~\ref{fig:conv-structure}. Only convolutions which would provide parameter and compute reduction are replaced with separable convolutions. For ResNet50V2, these are any convolutions where the kernel size $n > 1$.
+	
+	These two additional CNNs are called ResNet50V2-Spatial and ResNet50V2-Depthwise, where convolutional layers are replaced with spatial and depthwise convolutions respectively. 
+	
+	% \subsection{Quantization-aware Training}
+	
+	\subsection{Post-training quantization}
+	% How were layers quantized
+	The fully trained models are compressed to 8-bit precision using TensorFlow Lite. The framework recommends the provision of the representative dataset to enhance the optimization process. This allows for quantization of both weights and activations for quantizable operations. The representative dataset is compiled using 1000 samples from the dataset. 	
+	
 	
 	\section{Evaluation and results}
+	
+	\begin{table}
+		\caption{Results}
+		\label{tbl:results}
+		\centering
+		\begin{tabular}{llll}
+			\toprule
+			Name                            & Loss & Accuracy (\%) & Size (MB) \\ \midrule
+			ResNet50V2                      & 0    & 100           & 20000     \\
+			ResNet50V2-Spatial              & 0    & 100           & 2000      \\
+			ResNet50V2-Depthwise            & 0    & 100           & 2000      \\
+			Compressed ResNet50V2           & 0    & 100           & 20000     \\
+			Compressed ResNet50V2-Spatial   & 0    & 100           & 2000      \\
+			Compressed ResNet50V2-Depthwise & 0    & 100           & 2000      \\ \bottomrule
+		\end{tabular}
+	\end{table}
 	
 	% include implications of results
 	%Limitations

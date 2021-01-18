@@ -19,18 +19,26 @@ from src.resnet import resnet_18, resnet_50
 
 
 
-def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, depthwise_conv, folder_name, data_dir):
+def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, depthwise_conv, folder_name, data_dir, early_stopping):
 
-    (X_train, Y_train), (X_test, Y_test) = cifar10.load_data()
+    (X_train, Y_train), _ = cifar10.load_data()
+
+
+    validation_split = 0.2
+    X_train = X_train[:-int(X_train.shape[0]*validation_split)]
+    Y_train = Y_train[:-int(Y_train.shape[0]*validation_split)]
+    X_val = X_train[-int(X_train.shape[0]*validation_split):]
+    Y_val = Y_train[-int(Y_train.shape[0]*validation_split):]
+
     Y_train = tf.keras.utils.to_categorical(Y_train, 10)
-    Y_test = tf.keras.utils.to_categorical(Y_test, 10)
+    Y_val = tf.keras.utils.to_categorical(Y_val, 10)
 
     # Rescale
-    X_train = X_train/255. 
-    X_test = X_test/255. 
+    X_train = X_train/255.
+    X_val = X_val/255. 
 
     ds_train = tf.data.Dataset.from_tensor_slices((X_train, Y_train)).shuffle(100).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
-    ds_val = tf.data.Dataset.from_tensor_slices((X_test, Y_test)).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
+    ds_val = tf.data.Dataset.from_tensor_slices((X_val, Y_val)).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
 
     # Subtract Mean
     # mean_image = np.mean(X_train, axis=0)
@@ -107,6 +115,16 @@ def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, de
             period=10
         )
     ]
+    if early_stopping:
+        callbacks.append(
+            tf.keras.callbacks.EarlyStopping(
+                monitor='val_loss',
+                min_delta=0.005,
+                patience=10,
+                verbose=1,
+                restore_best_weights=True
+            )
+        )
 
     model.summary()
 
@@ -158,6 +176,7 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--batch_size', type=int, default=32)
     parser.add_argument('-i', '--input_size', type=int, default=32)
     parser.add_argument('--data_dir', default=os.path.join('/', 'media', 'nicholas', 'Data', 'nicho', 'Documents', 'tensorflow_datasets'))
+    parser.add_argument('--early_stopping', action='store_true', default=False)
     args = parser.parse_args()
 
 
@@ -169,5 +188,6 @@ if __name__ == "__main__":
     asymetric_conv = args.asymetric
     depthwise_conv = args.depthwise
     folder_name = args.folder_name
+    early_stopping = args.early_stopping
 
-    train(epochs, batch_size, input_size, quantized_training, asymetric_conv, depthwise_conv, folder_name, data_dir)
+    train(epochs, batch_size, input_size, quantized_training, asymetric_conv, depthwise_conv, folder_name, data_dir, early_stopping)
