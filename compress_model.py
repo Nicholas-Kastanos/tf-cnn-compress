@@ -7,17 +7,19 @@ model_name = 'resnet_cifar10_depth_30ep'
 saved_model_dir = './models/' + model_name + '/model'
 
 
-_, (X_test, Y_test) = cifar10.load_data()
+(X_train, Y_train), (X_test, Y_test) = cifar10.load_data()
+Y_train = tf.keras.utils.to_categorical(Y_test, 10)
 Y_test = tf.keras.utils.to_categorical(Y_test, 10)
 
 # Rescale
+X_train = X_train.astype(np.float32)/255. 
 X_test = X_test.astype(np.float32)/255. 
 
 
 
 ds_test = tf.data.Dataset.from_tensor_slices((X_test, Y_test)).batch(1).cache().prefetch(tf.data.experimental.AUTOTUNE)
 def representative_data_gen():
-  for input_value in tf.data.Dataset.from_tensor_slices(X_test).batch(1).take(1000):
+  for input_value in tf.data.Dataset.from_tensor_slices(X_train).batch(1).take(1000):
     # Model has only one input so each data point has one element.
     yield [input_value]
 

@@ -29,6 +29,8 @@
 \usepackage{microtype}      % microtypography
 \usepackage{multicol}
 \usepackage{graphicx}
+\usepackage[font={it}]{caption}
+\usepackage{subcaption}
 
 \title{Structural Compression of ResNet-like Convolutional Neural Networks}
 
@@ -67,13 +69,35 @@
 	% can discuss relationships between existing knowledge and what is being done here	
 	\subsection{ResNet}
 	
-	The residual block first postulated for use in ResNet has become a common-place feature in many subsequent networks (DenseNet, Inception). 
+	The residual block first postulated for use in ResNet has become a common-place feature in many subsequent networks. %(DenseNet, Inception). 
+	It was designed to combat network degradation in very deep networks, where they were learning more complicated features than were required. The skip connections introduced by the residual block allow features to bypass convolutional blocks, while also being affected by them. This can be summarised in the formula $g(x) = f(x) + x$ where $x$ is the input, $g(x)$ is the desired output, and $f(x)$ is the input affected by the convolutional block.
+	
+	\begin{figure}[b!]
+		\centering
+		\begin{subfigure}[b]{\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{images/identity_base.pdf}
+			\caption{Identity passthrough}
+			\label{fig:resnet-identity}
+		\end{subfigure}
+		\vfill
+		\begin{subfigure}[b]{\textwidth}
+			\centering
+			\includegraphics[width=\textwidth]{images/bottleneck_base.pdf}
+			\caption{Bottleneck passthrough}
+			\label{fig:resnet-bottleneck}
+		\end{subfigure}
+		\caption{Residual blocks used in ResNetV2}
+		\label{fig:resnet}
+	\end{figure}
+	
+	This architecture was further developed until the form presented in ResNetV2, which includes two variants: identity passthrough which applies pooling to the skip connection $x$; and bottleneck passthrough, which includes a single convolution in the skip connection. These two residual blocks can be seen in Figure~\ref{fig:resnet}.
 	% ResNet https://arxiv.org/abs/1512.03385
 	% ResNet50V2 https://arxiv.org/abs/1603.05027
 	
 	\subsection{Separable convolutions}
 	
-	Convolution Layers contain a vast majority of the parameters in modern CNNs. By targeting parameter reductions to these layers, the compression can be spread throughout the network. Separable convolutions reduce the number of parameters by separating the convolution into multiple stages through spatially and depthwise separable convolutions. While these convolutions reduces the memory and computation requirements of the system, the reduction in parameters reduces the number of possible kernels explored in training, and the resulting network may be suboptimal.
+	Convolution layers contain a vast majority of the parameters in modern CNNs. By targeting parameter reductions to these layers, the compression can be spread throughout the network. Separable convolutions reduce the number of parameters by decomposing the convolution into multiple stages through spatially and depthwise separable convolutions. While these convolutions reduce the memory and computation requirements of the system, the reduced parameters limits the number of possible kernels explored in training, and the resulting network may be suboptimal.
 	
 	\subsubsection{Spatially separable convolutions}
 	
@@ -84,9 +108,12 @@
 	
 	A convolution kernel can be decomposed on its 2D spatial axis, i.e. height and width. Conceptually, the $n \times n$ kernel can be separated into two smaller kernels, a $n \times 1$ followed by a $1 \times n$ kernel. These kernels can be applied in sequential convolutions to obtain the same output shape as the single convolution. These decomposed kernels scale the parameters required by the convolution by a factor $P_s(n)$ (see Equation~\ref{eqn:spat_params}). 
 	
-	Similarly, the multiplication operations of a spatially separated convolution are reduced. For a $M \times M$ input convolved with a $n \times n$ kernel, the number of multipications are reduced by a factor of $M_s(n)$ (see Equation~\ref{eqn:spat_ops}). 
+	%TODO
+	Similarly, the multiplication <<MAC>> operations of a spatially separated convolution are reduced. For a $M \times M$ input convolved with a $n \times n$ kernel, the number of multiplications are reduced by a factor of $M_s(n)$ (see Equation~\ref{eqn:spat_ops}). 
 	
 	Equations~\ref{eqn:spat_params})~and~\ref{eqn:spat_ops} show that spatially separable convolutions show computational benefits when $n > 2$. 
+	
+	\vspace{-1cm}
 	
 	\begin{multicols}{2}
 		\begin{equation}\label{eqn:spat_params}
@@ -134,7 +161,7 @@
 	%% how were the networks trained
 	
 	% Use of datasets CIFAR10
-	The CNNs are trained using the CIFAR-10 dataset, with random horizontal flips, rotations, and cropping. The Adam optimizer is used with a learning rate of $0.001$, and categorical crossentropy loss. The networks are trained for 30 epochs with a batch size of 32. 
+	The CNNs are trained using the CIFAR-10 dataset, with random horizontal flips, rotations, and cropping. The Adam optimizer is used with a learning rate of $0.001$, and categorical crossentropy loss. The networks are trained for 30 epochs with a batch size of 32. The CIFAR-10's training split is separated into train and validation splits. The splits are not shuffled to ensure consistency across models, and the validation split contains $10\%$ of the total training data. This keeps the dataset's test set free to evaluate the models on new data.
 	
 	\subsection{Modified residual blocks}
 	
@@ -152,21 +179,23 @@
 	
 	% \subsection{Quantization-aware Training}
 	
-	\subsection{Post-training quantization}
+	\subsection{Post-training quantization and compression}
 	% How were layers quantized
-	The fully trained models are compressed to 8-bit precision using TensorFlow Lite. The framework recommends the provision of the representative dataset to enhance the optimization process. This allows for quantization of both weights and activations for quantizable operations. The representative dataset is compiled using 1000 samples from the dataset. 	
+	The fully trained models are compressed to 8-bit precision using TensorFlow Lite. The framework recommends the provision of the representative dataset to enhance the optimization process. This allows for quantization of both weights and activations for quantizable operations. The representative dataset is compiled using 1000 samples from the training dataset. 	
 	
 	
 	\section{Evaluation and results}
 	
-	\begin{table}
+	
+	
+	\begin{table}[h!]
 		\caption{Results}
 		\label{tbl:results}
 		\centering
 		\begin{tabular}{llll}
 			\toprule
-			Name                            & Loss & Accuracy (\%) & Size (MB) \\ \midrule
-			ResNet50V2                      & 0    & 100           & 20000     \\
+			Name                            & Loss & Accuracy (\%) & Compression Factor \\ \midrule
+			ResNet50V2                      & 0    & 100           & 1     \\
 			ResNet50V2-Spatial              & 0    & 100           & 2000      \\
 			ResNet50V2-Depthwise            & 0    & 100           & 2000      \\
 			Compressed ResNet50V2           & 0    & 100           & 20000     \\
