@@ -16,7 +16,7 @@
 
 % to avoid loading the natbib package, add option nonatbib:
 %	\usepackage[nonatbib]{neurips_2020}
-\usepackage[final]{neurips_2020}
+\usepackage[final, nonatbib]{neurips_2020}
 
 \usepackage[utf8]{inputenc} % allow utf-8 input
 \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
@@ -29,7 +29,7 @@
 \usepackage{microtype}      % microtypography
 \usepackage{multicol}
 \usepackage{graphicx}
-\usepackage[font={it}]{caption}
+\usepackage{caption}
 \usepackage{subcaption}
 
 \title{Structural Compression of ResNet-like Convolutional Neural Networks}
@@ -60,17 +60,16 @@
 	
 	\section{Introduction}
 	
-	
+	Much of the research into convolutional neural networks (CNNs) are formed around increasing the performance of architectures for computer vision tasks, most commonly image classification and object detection \cite{adscnet, vgg, yolo, inception}. 
 	
 	% objectives and purpose
 	
 	\section{Related Work}
 	%reasons behind work	
 	% can discuss relationships between existing knowledge and what is being done here	
-	\subsection{ResNet}
+	\subsection{Residual networks}
 	
-	The residual block first postulated for use in ResNet has become a common-place feature in many subsequent networks. %(DenseNet, Inception). 
-	It was designed to combat network degradation in very deep networks, where they were learning more complicated features than were required. The skip connections introduced by the residual block allow features to bypass convolutional blocks, while also being affected by them. This can be summarised in the formula $g(x) = f(x) + x$ where $x$ is the input, $g(x)$ is the desired output, and $f(x)$ is the input affected by the convolutional block.
+	The residual block first postulated for use in ResNet has become a common-place feature in many subsequent networks \cite{resnetv1,inception, densenet}. It was designed to combat network degradation in very deep networks, where they were learning more complicated features than were required. The skip connections introduced by the residual block allow features to bypass convolutional blocks, while also being affected by them. This can be summarised in the formula $g(x) = f(x) + x$ where $x$ is the input, $g(x)$ is the desired output, and $f(x)$ is the input affected by the convolutional block.
 	
 	\begin{figure}[b!]
 		\centering
@@ -161,7 +160,7 @@
 	%% how were the networks trained
 	
 	% Use of datasets CIFAR10
-	The CNNs are trained using the CIFAR-10 dataset, with random horizontal flips, rotations, and cropping. The Adam optimizer is used with a learning rate of $0.001$, and categorical crossentropy loss. The networks are trained for 30 epochs with a batch size of 32. The CIFAR-10's training split is separated into train and validation splits. The splits are not shuffled to ensure consistency across models, and the validation split contains $10\%$ of the total training data. This keeps the dataset's test set free to evaluate the models on new data.
+	The CNNs are trained using the CIFAR-10 dataset in batches of 32, with random horizontal flips, rotations, and cropping data augmentations. The Adam optimizer is used with a learning rate of $0.001$, and categorical crossentropy loss. The CIFAR-10 training split is separated into train and validation splits. The splits are not shuffled to ensure consistency across models, and the validation split contains $10\%$ of the total training data. This keeps the dataset's test set free to evaluate the models on new data. The networks are trained until no improvement in the validation loss has been observed for 10 epochs, at which point the best results weights are saved. This ensures that each model has enough time to learn its optimal weights.
 	
 	\subsection{Modified residual blocks}
 	
@@ -184,50 +183,68 @@
 	The fully trained models are compressed to 8-bit precision using TensorFlow Lite. The framework recommends the provision of the representative dataset to enhance the optimization process. This allows for quantization of both weights and activations for quantizable operations. The representative dataset is compiled using 1000 samples from the training dataset. 	
 	
 	
-	\section{Evaluation and results}
+	\section{Results and evaluation}
 	
+	The trained CNNs are evaluated using the test split of CIFAR-10. The dataset includes 1000 samples from each of the 10 classes, ensuring class balance. The models are evaluated by creating TensorFlow Lite models from the original model. In the case of compressed models, the \verb|TFLiteConverter| optimizes the models and quantises the activations using the representative dataset. 
 	
+	Table~\ref{tbl:params} shows the total parameters in the ResNet50V2 models. This shows that substituting separable convolutions into a CNN, the total number of parameters can be reduced by up to $57~\%$. Table~\ref{tbl:results} shows the results of the analysis. The compression factor is the ratio of the model under investigation to that of the ResNet50V2 baseline model.
 	
 	\begin{table}[h!]
-		\caption{Results}
-		\label{tbl:results}
+		\caption{Parameter counts}
+		\label{tbl:params}
 		\centering
-		\begin{tabular}{llll}
+		\begin{tabular}{ll}
 			\toprule
-			Name                            & Loss & Accuracy (\%) & Compression Factor \\ \midrule
-			ResNet50V2                      & 0    & 100           & 1     \\
-			ResNet50V2-Spatial              & 0    & 100           & 2000      \\
-			ResNet50V2-Depthwise            & 0    & 100           & 2000      \\
-			Compressed ResNet50V2           & 0    & 100           & 20000     \\
-			Compressed ResNet50V2-Spatial   & 0    & 100           & 2000      \\
-			Compressed ResNet50V2-Depthwise & 0    & 100           & 2000      \\ \bottomrule
+			Convolution Type & Total Parameters \\ \midrule
+			Full             & $23,585,290$     \\
+			Spatial          & $19,812,874$     \\
+			Depthwise        & $13,559,498$     \\ \bottomrule
 		\end{tabular}
 	\end{table}
 	
+	\begin{table}[h!]
+		\caption{Results using the test split of CIFAR-10}
+		\label{tbl:results}
+		\centering
+		\begin{tabular}{lllll}
+			\toprule
+			Convolution Type     & Loss     & Accuracy (\%)    & Size (kB) & Compression Factor \\ \midrule
+			Full                 & $1.0045$ & $74.63$          & $94,145$  & $1$                \\
+			Spatial              & $1.0334$ & $74.09$          & $79,064$  & $0.84$             \\
+			Depthwise            & $0.8940$ & $73.38$          & $54,050$  & $0.57$             \\
+			Compressed Full      & $1.3332$ & $73.99$          & $24,446$  & $0.26$             \\
+			Compressed Spatial   & $1.4457$ & $73.61$          & $20,770$  & $0.22$             \\
+			Compressed Depthwise & $1.0686$ & $\mathbf{73.29}$ & $14,517$  & $\mathbf{0.15}$    \\ \bottomrule
+		\end{tabular}
+	\end{table}
+
+	As seen in Table~\ref{tbl:results}, applying spatial convolutions to ResNet50V2 has a compression factor of $0.84$ while the drop in accuracy is $0.54~\%$. Depthwise convolutions result in an accuracy drop of $1.25~\%$ while compressing the network with compression factor of $0.57$.
+	
+	Applying both depthwise convolution substitution and 8-bit quantized compression results in a model approx 6.5 times smaller than the full ResNet50V2 model. This model does not significantly impact the performance of the model as seen by the accuracy decreasing by only $1.34~\%$. In addition to storage size, the maximum RAM requirements can be analysed by \verb|tflite-tools|. %TODO Cite
+	The uncompressed models require a maximum of $196.61~kB$, while the compressed versions require $49.15~kB$. This memory requirement is constant across convolution types. This is because the most memory intensive layers of ResNet50V2 are input processing layers.
+	
 	% include implications of results
+	The significant reduction in parameters and memory improvements shown by separable convolutions with very small drawbacks allows complicated CNN networks to be implemented on edge- or low-compute devices. This is especially true for larger CNNs such as larger ResNet variants, YOLO object detection networks.
+	
 	%Limitations
+	Large benefits are observed for ResNet50V2, however, these benefits are not without limits. The separable convolutions were only applied to $3 \times 3$ kernels, as ResNet does not include larger kernel sizes on a regular basis. While Equations~\ref{eqn:spat_params},~\ref{eqn:spat_ops},~and~\ref{eqn:depthwise} show that the compressive benefits of separable convolutions increase with kernel size, so too does the degradation in performance. This performance loss is not quantified by the results seen in Table~\ref{tbl:results}.
+	
+	\section{Future Work}
+	
+%	Larger kernels
+	In order to determine the validity of separable convolutions for larger networks, further investigation into larger kernel and input sizes is required. If these convolution decompositions do not result in significant performance degradations, further improvements to CNN compression can be observed.
+
+%	Combining depth and spatial
+	The initial depthwise convolution is $n \times n$, which can be separated spatially. The combination of these two techniques can result in further optimisation.
+	
+	% Quantized Training
 	
 	\section{Conclusion}
 	
+	ResNet-like neural networks are common in image applications, however their large size and complexity prevents them from being used in resource constrained scenarios. By replacing the convolution layers with spatially and depthwise separable convolutions, the memory and compute intensive convolutional layers can be compressed. These separable convolution layers were applied to the ResNet50V2 image classification CNN trained on the CIFAR-10 dataset, along with 8-bit quantization. The resulting network has a compression factor of $0.15$ while only observing a $1.34~\%$ decrease in accuracy. The now compressed network can be deployed to resource constrained devices to classify images at high accuracy while maintaining a low computational overhead.
 	
-	
-%	\begin{table}
-%		\caption{Sample table title}
-%		\label{sample-table}
-%		\centering
-%		\begin{tabular}{lll}
-%			\toprule
-%			\multicolumn{2}{c}{Part}                   \\
-%			\cmidrule(r){1-2}
-%			Name     & Description     & Size ($\mu$m) \\
-%			\midrule
-%			Dendrite & Input terminal  & $\sim$100     \\
-%			Axon     & Output terminal & $\sim$10      \\
-%			Soma     & Cell body       & up to $10^6$  \\
-%			\bottomrule
-%		\end{tabular}
-%	\end{table}
-%	
-
+	\newpage
+	\bibliographystyle{ieeetr}
+	\bibliography{references}
 	
 \end{document}

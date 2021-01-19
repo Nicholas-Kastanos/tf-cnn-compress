@@ -1,0 +1,31 @@
+\begin{thebibliography}{1}
+
+\bibitem{adscnet}
+J.~Wang, H.~Xiong, H.~Wang, and X.~Nian, ``{ADSCNet}: asymmetric depthwise
+  separable convolution for semantic segmentation in real-time,'' {\em Applied
+  Intelligence}, vol.~50, no.~4, pp.~1045--1056, 2020.
+
+\bibitem{vgg}
+K.~Simonyan and A.~Zisserman, ``Very deep convolutional networks for
+  large-scale image recognition,'' {\em arXiv preprint arXiv:1409.1556}, 2014.
+
+\bibitem{yolo}
+A.~Bochkovskiy, C.-Y. Wang, and H.~Liao, ``Yolov4: Optimal speed and accuracy
+  of object detection,'' {\em ArXiv}, vol.~abs/2004.10934, 2020.
+
+\bibitem{inception}
+C.~Szegedy, V.~Vanhoucke, S.~Ioffe, J.~Shlens, and Z.~Wojna, ``Rethinking the
+  inception architecture for computer vision,'' in {\em Proceedings of the IEEE
+  conference on computer vision and pattern recognition}, pp.~2818--2826, 2016.
+
+\bibitem{resnetv1}
+K.~He, X.~Zhang, S.~Ren, and J.~Sun, ``Deep residual learning for image
+  recognition,'' in {\em Proceedings of the IEEE conference on computer vision
+  and pattern recognition}, pp.~770--778, 2016.
+
+\bibitem{densenet}
+G.~Huang, Z.~Liu, L.~Van Der~Maaten, and K.~Q. Weinberger, ``Densely connected
+  convolutional networks,'' in {\em Proceedings of the IEEE conference on
+  computer vision and pattern recognition}, pp.~4700--4708, 2017.
+
+\end{thebibliography}
