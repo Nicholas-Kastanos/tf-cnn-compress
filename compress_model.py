@@ -1,9 +1,16 @@
-import tensorflow as tf
+import argparse
+
 import numpy as np
+import tensorflow as tf
 from tensorflow.keras.datasets import cifar10
 
-model_name = 'resnet_cifar10_depth_es_2'
-compress = True
+parser = argparse.ArgumentParser()
+parser.add_argument('-n', '--model_name')
+parser.add_argument('-c', '--compress', action='store_true', default=False)
+args = parser.parse_args()
+
+model_name = args.model_name
+compress = args.compress
 
 
 saved_model_dir = './models/' + model_name + '/model'
