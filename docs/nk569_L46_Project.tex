@@ -20,7 +20,7 @@
 
 \usepackage[utf8]{inputenc} % allow utf-8 input
 \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
-\usepackage{hyperref}       % hyperlinks
+\usepackage[hidelinks]{hyperref}       % hyperlinks
 \usepackage{url}            % simple URL typesetting
 \usepackage{booktabs}       % professional-quality tables
 \usepackage{amsfonts}       % blackboard math symbols
@@ -32,7 +32,7 @@
 \usepackage{caption}
 \usepackage{subcaption}
 
-\title{Structural Compression of ResNet-like Convolutional Neural Networks}
+\title{Structural Compression of ResNet-like Convolutional Neural Networks using Separable Convolutions}
 
 % The \author macro works with any number of authors. There are two commands
 % used to separate the names and addresses of multiple authors: \And and \AND.
@@ -55,7 +55,7 @@
 	\maketitle
 	
 	\begin{abstract}
-		abstract
+		Convolutional neural networks (CNNs) are commonly used in computer vision neural networks, however inference on very deep models is resource intensive. In order to apply these CNNs to resource constrained devices, models must be compressed. By replacing convolution layers with separable convolutions, the number of parameters and multiply-accumulate operations can be reduced at the cost of performance. In this report, the compressibility of ResNet50V2 CNN model is investigated by replacing convolutions with spatial and depthwise convolutions. Additionally, the effects of 8-bit quantized compression on these layers is investigated. It is shown that a 8-bit compressed ResNet50V2 model with depthwise convolutions has a compression factor of $0.15$ while only experiencing a $1.34~\%$ decrease in accuracy.
 	\end{abstract}
 	
 	\section{Introduction}
@@ -64,7 +64,7 @@
 	
 	Newer networks such as MobileNet \cite{mobilenet}, ShuffleNet \cite{shufflenet}, and EffNet \cite{effnet} each use different forms of separable convolutions to reduce the number of parameters and multiply-accumulate operations (MACs), while maintaining model performance. This structural compression allows CNNs to be applied to previously unavailable applications, such as autonomous vehicles, cellphones, and robotics.	While the benefits of separable convolutions can be seen in the networks which implement them, many other structural changes are also introduced. Therefore, the precise impact of separable convolutions ambiguous.
 	
-	In this paper, the effects of two types of separable convolutions -- spatially and depthwise -- are investigated in the ResNet50V2 architecture \cite{resnetv2}. This is achieved by replacing convolutional layers with separable variants, while making no other structural changes. Additionally, the effects of 8-bit quantization on the separable convolutions are investigated. Section~\ref{sec:background} gives contextual information on the CNN architecture and optimizations. The experiments use the TensorFlow framework \cite{tensorflow2015-whitepaper} for training and evaluation. Section~\ref{sec:methodology} details the experiment setup, while Section~\ref{sec:results} contains the experiment results and discussion. The source code used for the development of the neural networks can be accessed at \url{https://github.com/Nicholas-Kastanos/tf-cnn-compress}.
+	In this paper, the effects of two types of separable convolutions -- spatial and depthwise -- are investigated in the ResNet50V2 architecture \cite{resnetv2}. This is achieved by replacing convolutional layers with separable variants, while making no other structural changes. Additionally, the effects of 8-bit quantization on the separable convolutions are investigated. Section~\ref{sec:background} gives contextual information on the CNN architecture and optimizations. The experiments use the TensorFlow framework \cite{tensorflow2015-whitepaper} for training and evaluation. Section~\ref{sec:methodology} details the experiment setup, while Section~\ref{sec:results} contains the experiment results and discussion. The source code used for the development of the neural networks can be accessed at \url{https://github.com/Nicholas-Kastanos/tf-cnn-compress}.
 		
 	% objectives and purpose
 	
@@ -126,7 +126,7 @@
 	
 	Depthwise separable convolutions separate the spatial convolution from the depth of the filters \cite{mobilenet,xception}. This is accomplished by an initial depthwise convolution, followed by a pointwise convolution. The initial depthwise convolution separates the channels of the input and kernel, and convolves them independently. The pointwise convolution is a $N_F \times 1 \times 1 \times N_C$ convolution where $N_F$ and $N_C$ are the number of filters and channels respectively. 
 	
-	The number of parameters $P_d(n)$ and multiplications $M_d(n)$ are reduced by the same factor, which can be seen in Equation~\ref{eqn:depthwise}. Many CNNs have $N_F >> 1$ \cite{vgg, yolo, resnetv2}, therefore depthwise convolutions show compression kernel sizes greater than 1. 
+	The number of parameters $P_d(n)$ and multiplications $M_d(n)$ are reduced by the same factor, which can be seen in Equation~\ref{eqn:depthwise}. Many CNNs have $N_F >> 1$, therefore depthwise convolutions show compression kernel sizes greater than 1  \cite{vgg, yolo, resnetv2}. 
 
 	\begin{equation} \label{eqn:depthwise}
 		P_d(n) = M_d(n) = \frac{1}{n^2} + \frac{1}{N_F} \approx \frac{1}{n^2}
@@ -153,7 +153,7 @@
 	
 	\subsection{Modified residual blocks}
 	
-	\begin{figure}[h!]
+	\begin{figure}[t!]
 		\centering
 		\includegraphics[width=0.5\textwidth]{images/conv-structure.pdf}
 		\caption{Example of replaced convolutions with separable convolutions with $N_F$ filters, kernel size $n$, and stride $k$. From top to bottom: Traditional Convolution; Spatially Separable Convolution; Depthwise Separable Convolution}
@@ -175,22 +175,20 @@
 	
 	Table~\ref{tbl:params} shows the total parameters in the ResNet50V2 models. This shows that substituting separable convolutions into a CNN, the total number of parameters can be reduced by up to $57~\%$. Table~\ref{tbl:params} also shows training performance of the models.
 	
-	Table~\ref{tbl:results} shows the results of the analysis. The compression factor is the ratio of the model under investigation to that of the ResNet50V2 baseline model.
-	
-	\begin{table}[h!]
+	\begin{table}[b!]
 		\caption{Training statistics}
 		\label{tbl:params}
 		\centering
 		\begin{tabular}{lllll}
 			\toprule
-			Convolution Type & Total Parameters & Epochs & Train Loss & Validation Loss \\ \midrule
-			Full             & $23,585,290$     & 54     & 0.2539     & 0.2560          \\
-			Spatial          & $19,812,874$     & 70     & 0.2478     & 0.2888          \\
-			Depthwise        & $13,559,498$     & 47     & 0.4447     & 0.3516          \\ \bottomrule
+			Convolution Type & Total Parameters & Best Epoch & Train Loss & Validation Loss \\ \midrule
+			Full             & $23,585,290$     & 54         & 0.2539     & 0.2560          \\
+			Spatial          & $19,812,874$     & 70         & 0.2478     & 0.2888          \\
+			Depthwise        & $13,559,498$     & 47         & 0.4447     & 0.3516          \\ \bottomrule
 		\end{tabular}
 	\end{table}
 	
-	\begin{table}[h!]
+	\begin{table}[b!]
 		\caption{Results using the test split of CIFAR-10}
 		\label{tbl:results}
 		\centering
@@ -206,7 +204,7 @@
 		\end{tabular}
 	\end{table}
 
-	As seen in Table~\ref{tbl:results}, applying spatial convolutions to ResNet50V2 has a compression factor of $0.84$ while the drop in accuracy is $0.54~\%$. Depthwise convolutions result in an accuracy drop of $1.25~\%$ while compressing the network with compression factor of $0.57$.
+	Table~\ref{tbl:results} shows the results of the analysis. The compression factor is the ratio of the model size under investigation to that of the ResNet50V2 baseline model. As seen in Table~\ref{tbl:results}, applying spatial convolutions to ResNet50V2 has a compression factor of $0.84$ while the drop in accuracy is $0.54~\%$. Depthwise convolutions result in an accuracy drop of $1.25~\%$ while compressing the network with compression factor of $0.57$.
 	
 	Applying both depthwise convolution substitution and 8-bit quantized compression results in a model approx 6.5 times smaller than the full ResNet50V2 model. This model does not significantly impact the performance of the model as seen by the accuracy decreasing by only $1.34~\%$. In addition to storage size, the maximum RAM requirements can be analysed by \verb|tflite-tools| \cite{tflietools}. The uncompressed models require a maximum of $196.61~kB$, while the compressed versions require $49.15~kB$. This memory requirement is constant across convolution types because the most memory intensive layers of ResNet50V2 are input processing layers.
 	

@@ -9,17 +9,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.datasets import cifar10
 
-from src.resnet import resnet_18, resnet_50
+from src.resnet import resnet_50
 
-# try:
-#     import google.colab  # pylint: disable=no-name-in-module,import-error
-#     IN_COLAB = True
-# except:
-#     IN_COLAB = False
-
-
-
-def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, depthwise_conv, folder_name, data_dir, early_stopping):
+def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, depthwise_conv, folder_name, early_stopping):
 
     (X_train, Y_train), _ = cifar10.load_data()
 
@@ -39,11 +31,6 @@ def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, de
 
     ds_train = tf.data.Dataset.from_tensor_slices((X_train, Y_train)).shuffle(100).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
     ds_val = tf.data.Dataset.from_tensor_slices((X_val, Y_val)).batch(batch_size).cache().prefetch(tf.data.experimental.AUTOTUNE)
-
-    # Subtract Mean
-    # mean_image = np.mean(X_train, axis=0)
-    # X_train = X_train - mean_image
-    # X_test = X_test - mean_image 
 
     model_dir = 'models/' + folder_name
     if not os.path.isdir(model_dir):
@@ -128,35 +115,6 @@ def train(epochs, batch_size, input_size, quantized_training, asymetric_conv, de
 
     model.summary()
 
-    # ResNet50V2
-    # Total params: 23,585,290
-    # Trainable params: 23,539,850
-    # Non-trainable params: 45,440
-
-    # ResNet50V2 Spatial
-    # Total params: 19,812,874
-    # Trainable params: 19,767,434
-    # Non-trainable params: 45,440
-
-    # ResNet50V2 Depthwise
-    # Total params: 13,559,498
-    # Trainable params: 13,514,058
-    # Non-trainable params: 45,440
-
-    # ResNet50V2 Both, But breaks
-    # Total params: 14,805,642
-    # Trainable params: 14,760,202
-    # Non-trainable params: 45,440
-
-    # model.fit(
-    #     X_train,
-    #     Y_train,
-    #     batch_size=batch_size,
-    #     epochs=epochs,
-    #     validation_data=(X_test, Y_test),
-    #     callbacks=callbacks
-    # )
-
     model.fit(
         ds_train,
         epochs=epochs,
@@ -175,12 +133,10 @@ if __name__ == "__main__":
     parser.add_argument('-e', '--epochs', type=int, default=50)
     parser.add_argument('-b', '--batch_size', type=int, default=32)
     parser.add_argument('-i', '--input_size', type=int, default=32)
-    parser.add_argument('--data_dir', default=os.path.join('/', 'media', 'nicholas', 'Data', 'nicho', 'Documents', 'tensorflow_datasets'))
     parser.add_argument('--early_stopping', action='store_true', default=False)
     args = parser.parse_args()
 
 
-    data_dir = args.data_dir
     epochs = args.epochs
     batch_size = args.batch_size
     input_size = (args.input_size, args.input_size, 3)
@@ -190,4 +146,4 @@ if __name__ == "__main__":
     folder_name = args.folder_name
     early_stopping = args.early_stopping
 
-    train(epochs, batch_size, input_size, quantized_training, asymetric_conv, depthwise_conv, folder_name, data_dir, early_stopping)
+    train(epochs, batch_size, input_size, quantized_training, asymetric_conv, depthwise_conv, folder_name, early_stopping)
